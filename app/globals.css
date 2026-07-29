@@ -1,0 +1,132 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Kristal light — near-white with subtle cool cast */
+    --background: 210 33% 99%;
+    --foreground: 214 60% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 214 60% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 214 60% 10%;
+
+    /* signal-800 as primary — deep broadcast blue */
+    --primary: 214 74% 17%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 214 60% 15%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    /* signal-500 as accent — transmit blue */
+    --accent: 216 84% 52%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 350 89% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 216 84% 52%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* Kristal dark — control-room feel, near-black with cool undertones */
+    --background: 214 30% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 214 30% 8%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 214 30% 8%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 216 84% 60%;
+    --primary-foreground: 214 60% 10%;
+
+    --secondary: 214 25% 14%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 214 25% 14%;
+    --muted-foreground: 217 15% 65%;
+
+    --accent: 216 84% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 350 89% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 25% 16%;
+    --input: 214 25% 16%;
+    --ring: 216 84% 60%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* callsign — event refs styled as broadcast callsigns */
+  .callsign {
+    @apply font-mono text-[0.72rem] uppercase tracking-[0.14em] text-muted-foreground;
+  }
+
+  /* on-air pill — reserved for events currently broadcasting */
+  .on-air-pill {
+    @apply inline-flex items-center gap-1.5 rounded-full bg-onair px-2 py-0.5 text-[0.65rem] font-semibold uppercase tracking-widest text-white;
+  }
+
+  .on-air-pill::before {
+    content: "";
+    @apply block h-1.5 w-1.5 rounded-full bg-white animate-on-air-pulse;
+  }
+
+  /* subtle scan-line texture on the login panel — nod to broadcast */
+  .broadcast-grid {
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.4) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.4) 1px, transparent 1px);
+    background-size: 40px 40px;
+    background-position: -1px -1px;
+  }
+}
+
+/* FullCalendar theming — bind to CSS vars so light/dark just work */
+.fc {
+  --fc-border-color: hsl(var(--border));
+  --fc-page-bg-color: hsl(var(--card));
+  --fc-neutral-bg-color: hsl(var(--muted));
+  --fc-list-event-hover-bg-color: hsl(var(--muted));
+  --fc-today-bg-color: hsl(var(--accent) / 0.08);
+  --fc-event-bg-color: hsl(var(--accent));
+  --fc-event-border-color: hsl(var(--accent));
+  --fc-event-text-color: white;
+  color: hsl(var(--foreground));
+  font-family: inherit;
+}
+
+.fc .fc-toolbar-title {
+  @apply text-lg font-semibold;
+}
+
+.fc .fc-button {
+  @apply bg-secondary text-secondary-foreground border-border shadow-none;
+  text-transform: none;
+}
+
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active {
+  @apply bg-primary text-primary-foreground border-primary;
+}
