@@ -78,6 +78,32 @@ export function inviteUser(input: Omit<User, "id" | "createdAt" | "verificationS
 }
 
 /**
+ * Provision a Viewer account for a user who signed in successfully via
+ * Microsoft Entra ID but doesn't exist in KEMS yet. No invitation/password
+ * flow is needed — Entra already verified their identity — so the account
+ * is created directly in VERIFIED state. Department is left "Unassigned"
+ * for a Super Admin to correct on the Users page.
+ */
+export function provisionEntraUser(input: { email: string; fullName: string }): User {
+  const now = new Date().toISOString();
+  const record: User = {
+    id: makeId("u"),
+    fullName: input.fullName,
+    email: input.email,
+    department: "Unassigned",
+    jobTitle: "Auto-provisioned via Microsoft sign-in",
+    role: "VIEWER",
+    status: "active",
+    verificationStatus: "VERIFIED",
+    verifiedAt: now,
+    createdAt: now,
+    lastLoginAt: now,
+  };
+  store.users.set(record.id, record);
+  return record;
+}
+
+/**
  * Regenerate the invitation token (used by "Resend invite" action).
  */
 export function refreshInvitation(id: string): User | null {

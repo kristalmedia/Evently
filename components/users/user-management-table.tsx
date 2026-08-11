@@ -58,6 +58,7 @@ const DEPARTMENTS: Department[] = [
   "CCM",
   "HR",
   "General Manager",
+  "Unassigned",
 ];
 
 const ROLES: Role[] = [

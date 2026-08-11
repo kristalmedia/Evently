@@ -1,20 +1,30 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import type { Session } from "./types";
-import { getUserById, upsertUser } from "./store";
+import { getUserByEmail, getUserById, provisionEntraUser, upsertUser } from "./store";
+import { auth } from "./better-auth";
 
 const SESSION_COOKIE = "km_session";
 
 /**
- * MOCK AUTH SCAFFOLD.
- * -----------------------------------------------------------------------------
- * The API surface here (`getSession`, `signInAsUserId`, `signOut`) is the
- * intended contract. When you're ready to swap in Microsoft Entra ID, keep this
- * file's exports the same and rewrite the internals to validate a real JWT /
- * NextAuth session. Everything else in the app depends only on these functions.
- * -----------------------------------------------------------------------------
+ * Dual auth: real Microsoft Entra ID SSO (via Better Auth) checked first,
+ * with the mock "test environment" cookie session (see login-panel.tsx) as a
+ * fallback for exploring KEMS without an Entra account. Everything else in
+ * the app depends only on `getSession` / `signInAsUserId` / `signOut`.
  */
 
 export async function getSession(): Promise<Session | null> {
+  // 1. Real Entra ID session takes priority.
+  const entraSession = await auth.api.getSession({ headers: await headers() });
+  const entraEmail = entraSession?.user?.email;
+  if (entraEmail) {
+    const user =
+      getUserByEmail(entraEmail) ??
+      provisionEntraUser({ email: entraEmail, fullName: entraSession.user?.name ?? entraEmail });
+    if (user.status === "disabled") return null;
+    return { user, issuedAt: entraSession.session.createdAt.toISOString() };
+  }
+
+  // 2. Fall back to the mock/test-environment cookie session.
   const jar = await cookies();
   const raw = jar.get(SESSION_COOKIE)?.value;
   if (!raw) return null;
@@ -57,4 +67,8 @@ export async function signInAsUserId(userId: string): Promise<Session | null> {
 export async function signOut() {
   const jar = await cookies();
   jar.delete(SESSION_COOKIE);
+  // Also clear Better Auth's own session cookie (dev + secure/prod variants)
+  // so signing out ends an Entra ID session too, not just the test-environment one.
+  jar.delete("better-auth.session_token");
+  jar.delete("__Secure-better-auth.session_token");
 }

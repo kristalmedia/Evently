@@ -15,7 +15,9 @@ export type Department =
   | "IT"
   | "CCM"
   | "HR"
-  | "General Manager";
+  | "General Manager"
+  /** Placeholder for accounts auto-provisioned via Microsoft Entra ID sign-in — a Super Admin should assign a real department. */
+  | "Unassigned";
 
 export type VerificationStatus = "INVITED" | "VERIFIED";
 
