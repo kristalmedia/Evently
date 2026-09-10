@@ -51,14 +51,33 @@ export const EVENT_PRIORITIES: { value: EventPriority; label: string }[] = [
   { value: "CRITICAL", label: "Critical" },
 ];
 
+/**
+ * Kristal event category taxonomy — 7 fixed options. The `name` value is
+ * both the display label AND the value stored on `EventConcept.category`,
+ * so any rename must be paired with a data migration.
+ *
+ * The `color` is the calendar swatch (see components/events/events-calendar.tsx).
+ */
 export const DEFAULT_CATEGORIES: EventCategory[] = [
-  { id: "cat_concert", name: "Concert", color: "#e11d48" },
-  { id: "cat_corporate", name: "Corporate", color: "#1d6feb" },
-  { id: "cat_live_broadcast", name: "Live Broadcast", color: "#0b2a4a" },
-  { id: "cat_community", name: "Community", color: "#059669" },
-  { id: "cat_internal", name: "Internal Meeting", color: "#64748b" },
-  { id: "cat_roadshow", name: "Roadshow", color: "#f59e0b" },
+  { id: "cat_kotg_indoor", name: "kotg - indoor", color: "#FF5733" },
+  { id: "cat_kotg_outdoor", name: "kotg - outdoor", color: "#33FF57" },
+  { id: "cat_live_announcement", name: "live announcement", color: "#3357FF" },
+  { id: "cat_panel", name: "panel", color: "#F333FF" },
+  { id: "cat_social_media", name: "social media", color: "#FF33F3" },
+  { id: "cat_radio", name: "radio", color: "#F3FF33" },
+  { id: "cat_website", name: "website", color: "#33FFF3" },
 ];
+
+/**
+ * Fast lookup from category name → hex color. Used by the calendar to
+ * colour events without importing the whole DEFAULT_CATEGORIES list.
+ */
+export const CATEGORY_COLOR: Record<string, string> = Object.fromEntries(
+  DEFAULT_CATEGORIES.map((c) => [c.name, c.color])
+);
+
+/** Fallback swatch when an event has no category assigned. */
+export const CATEGORY_COLOR_UNSET = "#94a3b8";
 
 /**
  * Kristal-owned broadcast/production kit — Section 4 checklist prefill.
@@ -195,9 +214,11 @@ export const RISK_TEMPLATE = [
 ];
 
 // ─── Section 8 — Broadcast platform choices (spec §3.8) ────────────────────
+// "Mobile Livestream" was intentionally removed — any legacy event records
+// that already stored this value keep it in the DB but the option no longer
+// appears in the picker for new selections.
 export const BROADCAST_PLATFORMS = [
   "Web Livestream",
-  "Mobile Livestream",
   "FM Radio",
   "Instagram",
   "TikTok",

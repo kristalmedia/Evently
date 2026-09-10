@@ -172,7 +172,7 @@ export function Section1() {
         <Field label="Expected attendance">
           <Input type="number" min={0} {...register("s1.expectedAttendance")} />
         </Field>
-        <Field label="Concept date" required error={e?.conceptDate?.message}>
+        <Field label="Event date" required error={e?.conceptDate?.message}>
           <Input type="date" {...register("s1.conceptDate")} />
         </Field>
       </FieldRow>

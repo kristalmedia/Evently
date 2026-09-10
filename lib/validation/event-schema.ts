@@ -16,7 +16,7 @@ export const section1Schema = z.object({
   expectedDurationHours: z.preprocess(emptyToUndef, z.coerce.number().min(0).optional()),
   expectedAttendance: z.preprocess(emptyToUndef, z.coerce.number().int().min(0).optional()),
   conceptPreparedBy: z.string().min(2, "Preparer name required."),
-  conceptDate: z.string().min(1, "Concept date required."),
+  conceptDate: z.string().min(1, "Event date required."),
   targetSubmissionDate: z.string().optional(),
 });
 

@@ -66,7 +66,7 @@ export async function exportEventPDF(event: EventConcept, opts?: { includeBudget
   const info: [string, string][] = [
     ["Venue", event.s1.venue || "—"],
     ["Organiser", event.s1.conceptPreparedBy || "—"],
-    ["Concept date", event.s1.conceptDate || "—"],
+    ["Event date", event.s1.conceptDate || "—"],
     ["Expected attendance", String(event.s1.expectedAttendance ?? "—")],
   ];
   if (event.s1.startDate) info.push(["Start", new Date(event.s1.startDate).toLocaleString("en-GB")]);

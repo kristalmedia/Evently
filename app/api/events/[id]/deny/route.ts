@@ -43,10 +43,26 @@ export async function POST(
   const event = getEventById(id);
   if (!event) return NextResponse.json({ error: "Event not found" }, { status: 404 });
 
+  // Only deny events that are actually awaiting an approver decision. Denying
+  // a DRAFT / CANCELLED / already-PUBLISHED event was returning 500s before
+  // because the state machine had nowhere to send it.
+  const denyable = event.status === "PENDING_APPROVAL" || event.status === "PENDING_FINAL_APPROVAL";
+  if (!denyable) {
+    return NextResponse.json(
+      { error: `Event is not awaiting approval (current status: ${event.status}).` },
+      { status: 409 }
+    );
+  }
+
+  // Older seed rows / drafts can have s11 completely absent; spreading
+  // `undefined` throws at runtime. Fall back to an empty entries list so the
+  // deny always resolves to a valid Section11_SignOff shape.
+  const currentSignoff = event.s11 ?? { entries: [] };
   const updated = updateEvent(id, {
     status: "REVISION_REQUIRED",
     s11: {
-      ...event.s11,
+      ...currentSignoff,
+      entries: currentSignoff.entries ?? [],
       denialReason: body.reason.trim(),
       deniedBy: user.fullName,
       deniedAt: new Date().toISOString(),

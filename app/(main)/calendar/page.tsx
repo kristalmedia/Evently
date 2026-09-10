@@ -14,6 +14,7 @@ export default async function CalendarPage() {
     end: r.endDate,
     url: `/events/${r.id}`,
     status: r.status,
+    category: r.category,
     isLive: r.isLive ?? false,
   }));
 
@@ -22,7 +23,7 @@ export default async function CalendarPage() {
       <PageHeader
         eyebrow="Event Management"
         title="Calendar"
-        description="Every scheduled event, colour-coded by status."
+        description="Every scheduled event, colour-coded by category."
       />
       <EventsCalendar events={items} />
     </div>

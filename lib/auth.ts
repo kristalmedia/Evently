@@ -64,11 +64,23 @@ export async function signInAsUserId(userId: string): Promise<Session | null> {
   return { user, issuedAt };
 }
 
-export async function signOut() {
+/**
+ * Clears both session mechanisms and reports whether the caller had a real
+ * Entra ID session — so the client knows whether it also needs to redirect
+ * the browser to Microsoft's own end_session_endpoint afterward. Clearing
+ * our cookies alone does not end the browser's Microsoft SSO session; that
+ * requires a separate front-channel redirect (see user-menu.tsx).
+ */
+export async function signOut(): Promise<{ wasEntraSession: boolean }> {
+  const entraSession = await auth.api.getSession({ headers: await headers() });
+  const wasEntraSession = !!entraSession;
+
   const jar = await cookies();
   jar.delete(SESSION_COOKIE);
   // Also clear Better Auth's own session cookie (dev + secure/prod variants)
   // so signing out ends an Entra ID session too, not just the test-environment one.
   jar.delete("better-auth.session_token");
   jar.delete("__Secure-better-auth.session_token");
+
+  return { wasEntraSession };
 }
