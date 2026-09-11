@@ -2,23 +2,26 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { approverRoleForUser } from "@/lib/permissions";
 import {
-  broadcastNotification,
   getAllUsers,
   getEventById,
   getUserByEmail,
   logAudit,
   markNotificationActed,
   pushNotificationTo,
-  sendEmail,
   updateEvent,
 } from "@/lib/store";
 import { APPROVER_EMAILS } from "@/lib/constants";
 import type { SignOffEntry } from "@/lib/types";
 
 /**
- * Approve action — moves the event to the next approver in the chain.
- * Rudy (2nd) approves → routes to Jenny (Final) with an APPROVAL_REQUEST.
- * Jenny (Final) approves → event marked PUBLISHED.
+ * Approve action — advances the event through the sequential workflow:
+ *   PENDING_APPROVAL       →  Rudy (2nd) approves     → PENDING_FINAL_APPROVAL
+ *   PENDING_FINAL_APPROVAL →  Jenny (Final) approves  → STAFFING_IN_PROGRESS
+ *                                                       (notifies all Managers)
+ *
+ * Onward transitions to FINANCIAL_REVIEW (Managers finish Staff) and to
+ * PUBLISHED (Putri finishes Financial + fan-out to all users) live in
+ * their own /complete-staffing and /complete-financials endpoints.
  */
 export async function POST(
   req: Request,
@@ -80,23 +83,24 @@ export async function POST(
       });
     }
   } else if (stage === "FINAL_APPROVER") {
-    nextStatus = "PUBLISHED";
-    // Broadcast to EVERY registered user announcing the upcoming event.
-    broadcastNotification({
-      kind: "EVENT_PUBLISHED",
-      title: `New upcoming event: ${event.s1.eventName}`,
-      body: `${event.s1.eventName} (${event.s1.eventRefNo}) has been fully approved by Nabeng, Rudy and Jenny. Venue: ${event.s1.venue}.`,
-      eventId: event.id,
-    });
+    // Jenny's approval no longer publishes the event directly — it hands off
+    // to Managers to fill Section 5 (Staff) first. The "publish to everyone"
+    // fan-out moved to /complete-financials, which fires once Putri finishes
+    // the Financial section.
+    nextStatus = "STAFFING_IN_PROGRESS";
 
-    // Also fan an actual SMTP email out to every active user. If SMTP isn't
-    // configured, sendEmail() returns simulated=true honestly instead of
-    // failing the approval — the in-app notification above is the source of
-    // truth either way, this is a courtesy channel. Fire-and-forget so a
-    // slow/failing transport doesn't stall the approve response.
-    void notifyAllUsersOfPublishedEvent(event).catch(() => {
-      /* already logged inside; final approval must not fail on email issues */
-    });
+    // Notify every active Manager that Staff is now unlocked for this event.
+    const managers = getAllUsers().filter(
+      (u) => u.status === "active" && u.role === "MANAGER"
+    );
+    for (const m of managers) {
+      pushNotificationTo(m.id, {
+        kind: "APPROVAL_GRANTED",
+        title: `Staff section unlocked: ${event.s1.eventName}`,
+        body: `Jenny finalized the event brief. Please fill the Staff section (roster + shifts) so Putri can complete the Financial review.`,
+        eventId: event.id,
+      });
+    }
   }
 
   const updated = updateEvent(id, { status: nextStatus, s11: { ...event.s11, entries: nextEntries } });
@@ -111,24 +115,4 @@ export async function POST(
   });
 
   return NextResponse.json({ event: updated });
-}
-
-/**
- * Fan out an "event published" email to every active user with an address.
- * Runs serially so we don't hammer the SMTP relay's concurrent-connection
- * limit — a Kristal org will be dozens, not thousands, of users.
- */
-async function notifyAllUsersOfPublishedEvent(event: ReturnType<typeof getEventById>) {
-  if (!event) return;
-  const recipients = getAllUsers().filter((u) => u.status === "active" && !!u.email);
-  const subject = `New event published: ${event.s1.eventName}`;
-  const body =
-    `${event.s1.eventName} (${event.s1.eventRefNo}) has been fully approved and is now published.\n\n` +
-    `Venue: ${event.s1.venue}\n` +
-    `Start: ${event.s1.startDate ? new Date(event.s1.startDate).toLocaleString("en-GB") : "TBC"}\n` +
-    (event.s1.endDate ? `End: ${new Date(event.s1.endDate).toLocaleString("en-GB")}\n` : "") +
-    `\nSee the full event brief in KEMS: /events/${event.id}\n\n— Kristal Media`;
-  for (const u of recipients) {
-    await sendEmail({ to: u.email, subject, body });
-  }
 }
