@@ -32,7 +32,7 @@ export async function PATCH(
   const updated = updateEvent(id, body);
   if (!updated) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Detailed audit for Broadcast Admin edits (spec §4).
+  // Detailed audit for Sales Admin edits (spec §4).
   const user = session!.user;
   let details = "PATCH via API";
   if (existing) {
@@ -43,8 +43,8 @@ export async function PATCH(
         changed.push(k);
       }
     }
-    if (user.role === "BROADCAST_ADMIN" && changed.length > 0) {
-      details = `Broadcast Admin edit — sections modified: ${changed.join(", ")}`;
+    if (user.role === "SALES_ADMIN" && changed.length > 0) {
+      details = `Sales Admin edit — sections modified: ${changed.join(", ")}`;
     } else if (changed.length > 0) {
       details = `${user.role} edit — sections modified: ${changed.join(", ")}`;
     }

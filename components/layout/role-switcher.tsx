@@ -91,7 +91,7 @@ export function RoleSwitcher() {
       <DropdownMenuContent align="end" className="w-72 max-h-[70vh] overflow-y-auto">
         <DropdownMenuLabel>Test as another user</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        {(["SUPER_ADMIN", "BROADCAST_ADMIN", "MANAGER", "FINANCIAL_ADMIN", "HR", "VIEWER"] as const).map(
+        {(["SUPER_ADMIN", "SALES_ADMIN", "CCM_ADMIN", "MANAGER", "FINANCE_LEAD", "FINANCIAL_ADMIN", "HR", "VIEWER"] as const).map(
           (role) =>
             (byRole[role]?.length ?? 0) > 0 && (
               <div key={role}>

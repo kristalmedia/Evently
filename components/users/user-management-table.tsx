@@ -63,8 +63,10 @@ const DEPARTMENTS: Department[] = [
 
 const ROLES: Role[] = [
   "SUPER_ADMIN",
-  "BROADCAST_ADMIN",
+  "SALES_ADMIN",
+  "CCM_ADMIN",
   "MANAGER",
+  "FINANCE_LEAD",
   "FINANCIAL_ADMIN",
   "HR",
   "VIEWER",

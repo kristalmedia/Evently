@@ -5,11 +5,33 @@ import type { Permission, Role, User } from "./types";
  *
  * Super Admin bypasses this table entirely — see `can()`.
  * All other roles are permission-exact.
+ *
+ * NOTE: section-level edit gating (which s1..s8 blocks each role can edit)
+ * lives in `editableSectionKeysForEvent` below, not here — some grants
+ * depend on the event's current status (Manager Staff unlocks only during
+ * STAFFING_IN_PROGRESS; Finance Lead Financial only during FINANCIAL_REVIEW).
  */
 const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   SUPER_ADMIN: [], // bypass — see `can()`
-  BROADCAST_ADMIN: [
-    // Nabeng + Sales — full edit across all event form sections
+  SALES_ADMIN: [
+    // Formerly BROADCAST_ADMIN — Sales team. Creates + edits events with
+    // Staff/Financial sections hidden entirely from their form nav.
+    "dashboard.view",
+    "events.view",
+    "events.create",
+    "events.edit",
+    "events.publish",
+    "events.manage_categories",
+    "events.manage_venues",
+    "events.assign_access",
+    "budget.view",
+    "calendar.view",
+    "reports.view",
+    "notifications.view",
+  ],
+  CCM_ADMIN: [
+    // Mirror of SALES_ADMIN, scoped to CCM-department event ownership.
+    // Section access is identical — no Staff/Financial editing.
     "dashboard.view",
     "events.view",
     "events.create",
@@ -24,7 +46,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "notifications.view",
   ],
   MANAGER: [
-    // Restricted edit: General Info, Financial, Sign-off only
+    // Staff editor (per-event, status-gated). Also handles Sign-off (s8).
     "dashboard.view",
     "events.view",
     "events.edit",
@@ -34,8 +56,8 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "reports.view",
     "notifications.view",
   ],
-  FINANCIAL_ADMIN: [
-    // Restricted edit: Financial section only
+  FINANCE_LEAD: [
+    // Putri — exclusive Financial editor (status-gated). Global read.
     "dashboard.view",
     "events.view",
     "events.edit",
@@ -44,8 +66,17 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "reports.view",
     "notifications.view",
   ],
+  FINANCIAL_ADMIN: [
+    // Rudy — Second Approver in the sign-off chain. Financial edit was
+    // moved to FINANCE_LEAD to make Putri's "exclusive access" real.
+    "dashboard.view",
+    "events.view",
+    "budget.view",
+    "calendar.view",
+    "reports.view",
+    "notifications.view",
+  ],
   HR: [
-    // Read-only for staff / roster / meal / overtime — no edits
     "dashboard.view",
     "events.view",
     "calendar.view",
@@ -127,11 +158,11 @@ export function canDeleteEvent(user: User | null | undefined): boolean {
   return isSuperAdmin(user);
 }
 
-/** Persistent edit access — Broadcast Admin, Manager, Financial Admin, Super Admin. */
+/** Persistent edit access — anyone who can edit at least one section on some event. */
 export function canEditEvent(user: User | null | undefined): boolean {
   if (!user) return false;
   if (isSuperAdmin(user)) return true;
-  return ["BROADCAST_ADMIN", "MANAGER", "FINANCIAL_ADMIN"].includes(user.role);
+  return ["SALES_ADMIN", "CCM_ADMIN", "MANAGER", "FINANCE_LEAD"].includes(user.role);
 }
 
 export function canCancelEvent(user: User | null | undefined): boolean {
@@ -151,21 +182,78 @@ export function canApproveNow(
 
 // ─── Section-level edit gating (spec §4) ───────────────────────────────────
 /**
- * Which display-section keys (s1..s8 in the form nav) a user is allowed to
- * edit. Returns "all" for unrestricted roles.
+ * Section keys, defined once so string typos don't drift out of sync.
+ * Matches ALL_SECTIONS in components/events/event-form/index.tsx.
  *
- *   Super Admin / Broadcast Admin → all
- *   Manager                        → s1 (General Info), s5 (Financial), s8 (Sign-off)
- *   Financial Admin                → s5 (Financial) only
- *   Others                         → none
+ *   s1 = General Info    s2 = Additional Info   s3 = Broadcast
+ *   s4 = Staff           s5 = Financial         s6 = Project Management
+ *   s7 = Risk            s8 = Sign-off
+ */
+const NON_STAFF_NON_FINANCIAL: readonly string[] = ["s1", "s2", "s3", "s6", "s7", "s8"];
+
+/**
+ * Which display-section keys a user is allowed to edit ON A SPECIFIC EVENT.
+ * The event.status matters because Manager Staff access and Finance Lead
+ * Financial access both unlock only at specific stages of the workflow.
+ * Callers that don't have an event in hand should use `editableSectionKeys`
+ * (below) which returns the role's *maximum* possible edit surface.
+ */
+export function editableSectionKeysForEvent(
+  user: User | null | undefined,
+  event: { status: string } | null | undefined
+): string[] | "all" {
+  if (!user || user.status === "disabled") return [];
+  if (isSuperAdmin(user)) return "all";
+
+  switch (user.role) {
+    case "SALES_ADMIN":
+    case "CCM_ADMIN":
+      // Staff (s4) and Financial (s5) are permanently hidden from Sales/CCM
+      // — they never fill those, at any stage. Everything else is theirs.
+      return [...NON_STAFF_NON_FINANCIAL];
+
+    case "MANAGER": {
+      // Always: General Info (s1) + Sign-off (s8). Staff (s4) only unlocks
+      // after Jenny finalizes the event.
+      const keys = ["s1", "s8"];
+      if (event?.status === "STAFFING_IN_PROGRESS") keys.push("s4");
+      return keys;
+    }
+
+    case "FINANCE_LEAD":
+      // Putri — exclusive Financial editor, and only during the review stage.
+      // Read-only at every other stage; enforced separately by canViewBudget.
+      if (event?.status === "FINANCIAL_REVIEW") return ["s5"];
+      return [];
+
+    case "FINANCIAL_ADMIN":
+    case "HR":
+    case "VIEWER":
+    default:
+      return [];
+  }
+}
+
+/**
+ * Role's maximum possible edit surface, ignoring per-event status.
+ * Used by the "new event" form (no event yet) and by anywhere that needs
+ * to decide whether to show edit affordances at all.
  */
 export function editableSectionKeys(user: User | null | undefined): string[] | "all" {
   if (!user || user.status === "disabled") return [];
   if (isSuperAdmin(user)) return "all";
-  if (user.role === "BROADCAST_ADMIN") return "all";
-  if (user.role === "MANAGER") return ["s1", "s5", "s8"];
-  if (user.role === "FINANCIAL_ADMIN") return ["s5"];
-  return [];
+
+  switch (user.role) {
+    case "SALES_ADMIN":
+    case "CCM_ADMIN":
+      return [...NON_STAFF_NON_FINANCIAL];
+    case "MANAGER":
+      return ["s1", "s4", "s8"];
+    case "FINANCE_LEAD":
+      return ["s5"];
+    default:
+      return [];
+  }
 }
 
 export function canEditSection(user: User | null | undefined, sectionKey: string): boolean {
@@ -173,10 +261,26 @@ export function canEditSection(user: User | null | undefined, sectionKey: string
   return editable === "all" || editable.includes(sectionKey);
 }
 
+/**
+ * Status-aware section edit check — the right call for "should the field
+ * be disabled in this render?" (the plain version answers "could this role
+ * ever edit this section, on any event?").
+ */
+export function canEditSectionOnEvent(
+  user: User | null | undefined,
+  sectionKey: string,
+  event: { status: string } | null | undefined
+): boolean {
+  const editable = editableSectionKeysForEvent(user, event);
+  return editable === "all" || editable.includes(sectionKey);
+}
+
 export const ROLE_LABEL: Record<Role, string> = {
   SUPER_ADMIN: "Super Admin",
-  BROADCAST_ADMIN: "Broadcast Admin",
+  SALES_ADMIN: "Sales Admin",
+  CCM_ADMIN: "CCM Admin",
   MANAGER: "Manager",
+  FINANCE_LEAD: "Finance Lead",
   FINANCIAL_ADMIN: "Financial Admin",
   HR: "HR",
   VIEWER: "Viewer",

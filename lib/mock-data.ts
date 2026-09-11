@@ -24,11 +24,11 @@ export const SEED_USERS: User[] = [
   u({ id: "u_gm01", fullName: "Jenny Malai Ali", email: "jenny.malaiali@kristal.media", department: "General Manager", jobTitle: "General Manager", role: "MANAGER" }),
 
   // ─── Sales — Can create events & view budgets ────────────────────────────
-  u({ id: "u_s01", fullName: "Wafi Sufri", email: "wafi.sufri@kristal.media", department: "Sales", role: "BROADCAST_ADMIN" }),
-  u({ id: "u_s02", fullName: "Nabil Hakeem", email: "nabilhakeem@kristal.media", department: "Sales", role: "BROADCAST_ADMIN" }),
-  u({ id: "u_s03", fullName: "Nabil Mahrub", email: "nabil.mahrub@kristal.media", department: "Sales", role: "BROADCAST_ADMIN" }),
-  u({ id: "u_s04", fullName: "Didi Razak", email: "didi.razak@kristal.media", department: "Sales", role: "BROADCAST_ADMIN" }),
-  u({ id: "u_s05", fullName: "Hazwan Hassan", email: "hazwan.hassan@kristal.media", department: "Sales", role: "BROADCAST_ADMIN" }),
+  u({ id: "u_s01", fullName: "Wafi Sufri", email: "wafi.sufri@kristal.media", department: "Sales", role: "SALES_ADMIN" }),
+  u({ id: "u_s02", fullName: "Nabil Hakeem", email: "nabilhakeem@kristal.media", department: "Sales", role: "SALES_ADMIN" }),
+  u({ id: "u_s03", fullName: "Nabil Mahrub", email: "nabil.mahrub@kristal.media", department: "Sales", role: "SALES_ADMIN" }),
+  u({ id: "u_s04", fullName: "Didi Razak", email: "didi.razak@kristal.media", department: "Sales", role: "SALES_ADMIN" }),
+  u({ id: "u_s05", fullName: "Hazwan Hassan", email: "hazwan.hassan@kristal.media", department: "Sales", role: "SALES_ADMIN" }),
 
   // ─── Finance ─────────────────────────────────────────────────────────────
   u({ id: "u_f01", fullName: "Khairuddin Rosli", email: "khairuddin.rosli@kristal.media", department: "Finance", jobTitle: "Sign-Off Authority", role: "FINANCIAL_ADMIN" }),
@@ -56,7 +56,12 @@ export const SEED_USERS: User[] = [
   u({ id: "u_t09", fullName: "Qawi Zainal Ariffin", email: "qawi.zainalariffin@kristal.media", department: "Technical", role: "VIEWER" }),
 
   // ─── HR — Viewer ─────────────────────────────────────────────────────────
-  u({ id: "u_h01", fullName: "Putri Sarabani", email: "putri.sarabani@kristal.media", department: "HR", role: "HR" }),
+  // Putri — Finance Lead. Exclusive editor of Section 5 (Financial) during
+  // the FINANCIAL_REVIEW stage; global read across every event.
+  u({ id: "u_h01", fullName: "Putri Sarabani", email: "putri.sarabani@kristal.media", department: "HR", jobTitle: "Finance Lead", role: "FINANCE_LEAD" }),
+
+  // ─── CCM Admin — mirror of Sales Admin, scoped to CCM department ─────────
+  u({ id: "u_cadm01", fullName: "Faadhil Aiman", email: "faadhil.aiman.admin@kristal.media", department: "CCM", jobTitle: "CCM Admin", role: "CCM_ADMIN" }),
 ];
 
 export const SEED_VENUES: EventVenue[] = [
@@ -73,7 +78,7 @@ export const SEED_EVENTS: EventConcept[] = [
     id: "evt_kotg_mall",
     status: "UPCOMING",
     priority: "MEDIUM",
-    category: "Community",
+    category: "kotg - indoor",
     createdBy: "u_gm01",
     createdAt: NOW,
     updatedAt: NOW,
@@ -110,7 +115,7 @@ export const SEED_EVENTS: EventConcept[] = [
     id: "evt_launch_hua",
     status: "PENDING_APPROVAL",
     priority: "HIGH",
-    category: "Corporate",
+    category: "live announcement",
     createdBy: "u_gm01",
     createdAt: NOW,
     updatedAt: NOW,
@@ -146,7 +151,7 @@ export const SEED_EVENTS: EventConcept[] = [
     id: "evt_kotg_taman",
     status: "ONGOING",
     priority: "MEDIUM",
-    category: "Community",
+    category: "kotg - outdoor",
     createdBy: "u_gm01",
     createdAt: NOW,
     updatedAt: NOW,
@@ -181,7 +186,7 @@ export const SEED_EVENTS: EventConcept[] = [
     id: "evt_school_roadshow",
     status: "COMPLETED",
     priority: "LOW",
-    category: "Community",
+    category: "panel",
     createdBy: "u_gm01",
     createdAt: NOW,
     updatedAt: NOW,

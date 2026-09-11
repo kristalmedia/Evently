@@ -36,6 +36,8 @@ export const EVENT_STATUSES: { value: EventStatus; label: string; tone: string }
   { value: "PENDING_FINAL_APPROVAL", label: "Pending Final Approval", tone: "amber" },
   { value: "REVISION_REQUIRED", label: "Revision Required", tone: "rose" },
   { value: "APPROVED", label: "Approved", tone: "signal" },
+  { value: "STAFFING_IN_PROGRESS", label: "Staffing in Progress", tone: "signal" },
+  { value: "FINANCIAL_REVIEW", label: "Financial Review", tone: "amber" },
   { value: "PUBLISHED", label: "Published", tone: "emerald" },
   { value: "UPCOMING", label: "Upcoming", tone: "signal" },
   { value: "ONGOING", label: "Ongoing", tone: "onair" },

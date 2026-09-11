@@ -185,6 +185,8 @@ export const eventConceptSchema = z.object({
       "PENDING_FINAL_APPROVAL",
       "REVISION_REQUIRED",
       "APPROVED",
+      "STAFFING_IN_PROGRESS",
+      "FINANCIAL_REVIEW",
       "PUBLISHED",
       "UPCOMING",
       "ONGOING",

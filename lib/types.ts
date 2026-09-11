@@ -1,9 +1,27 @@
 // ─── Users & auth ──────────────────────────────────────────────────────────
 
+/**
+ * Roles are hierarchical + orthogonal. See lib/permissions.ts for the full
+ * ROLE_PERMISSIONS matrix.
+ *
+ *   SUPER_ADMIN     — bypass (IT admins)
+ *   SALES_ADMIN     — event creation + edits (formerly BROADCAST_ADMIN;
+ *                     Staff + Financial sections hidden from their nav)
+ *   CCM_ADMIN       — same access surface as SALES_ADMIN, different dept
+ *   MANAGER         — Staff editor (unlocks per-event after Jenny finalizes)
+ *   FINANCE_LEAD    — exclusive Financial editor (unlocks per-event after
+ *                     Managers finish Staff); global read across all events
+ *   FINANCIAL_ADMIN — Finance dept read + 2nd-approver duties (Rudy);
+ *                     no longer holds Financial edit — that moved to
+ *                     FINANCE_LEAD to make the "exclusive" grant real
+ *   HR / VIEWER     — read-only tiers
+ */
 export type Role =
   | "SUPER_ADMIN"
-  | "BROADCAST_ADMIN"
+  | "SALES_ADMIN"
+  | "CCM_ADMIN"
   | "MANAGER"
+  | "FINANCE_LEAD"
   | "FINANCIAL_ADMIN"
   | "HR"
   | "VIEWER";
@@ -76,7 +94,9 @@ export type EventStatus =
   | "PENDING_FINAL_APPROVAL"  // With Jenny (final approver)
   | "REVISION_REQUIRED"       // Denied by an approver, back to submitter
   | "APPROVED"
-  | "PUBLISHED"               // Finally approved
+  | "STAFFING_IN_PROGRESS"    // Jenny finalized; Managers filling Staff (s4)
+  | "FINANCIAL_REVIEW"        // Managers finished Staff; Finance Lead filling Financial (s5)
+  | "PUBLISHED"               // Financial complete; broadcast to all users
   | "UPCOMING"
   | "ONGOING"
   | "COMPLETED"
