@@ -1,21 +1,23 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { EventsCalendar } from "@/components/events/events-calendar";
 import { requireSession } from "@/lib/auth";
-import { getEventRows } from "@/lib/store";
+import { getAllEvents } from "@/lib/store";
 
 export default async function CalendarPage() {
   await requireSession();
-  const rows = getEventRows();
+  // Use the full event objects rather than getEventRows() so the calendar
+  // can hand each event's description + venue into its hover popover.
+  const events = getAllEvents();
 
-  const items = rows.map((r) => ({
-    id: r.id,
-    title: r.title,
-    start: r.startDate,
-    end: r.endDate,
-    url: `/events/${r.id}`,
-    status: r.status,
-    category: r.category,
-    isLive: r.isLive ?? false,
+  const items = events.map((e) => ({
+    id: e.id,
+    title: e.s1.eventName,
+    start: e.s1.startDate,
+    end: e.s1.endDate,
+    status: e.status,
+    category: e.category,
+    description: e.s3?.description,
+    venue: e.s1?.venue,
   }));
 
   return (
@@ -23,7 +25,7 @@ export default async function CalendarPage() {
       <PageHeader
         eyebrow="Event Management"
         title="Calendar"
-        description="Every scheduled event, colour-coded by category."
+        description="Every scheduled event, colour-coded by category. Filter above; hover for a preview."
       />
       <EventsCalendar events={items} />
     </div>
