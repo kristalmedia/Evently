@@ -20,6 +20,7 @@ export function Section1() {
       index={1}
       title="General Information"
       description="Event title, nature, concept, category, organiser, and venue. Dates are set from the Broadcast Schedule in Section 3."
+      owner="sales"
     >
       <FieldRow>
         <Field label="Event title" required error={e?.eventName?.message}>

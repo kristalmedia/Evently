@@ -26,6 +26,7 @@ export function Section3() {
       index={3}
       title="Broadcast Details"
       description="How this event goes out — on-air, online, social. Add per-day time slots with breaks for the full broadcast schedule."
+      owner="sales"
     >
       <div className="space-y-3">
         <Label>Live broadcast?</Label>

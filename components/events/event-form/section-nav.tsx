@@ -2,12 +2,15 @@
 
 import { Check, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { OWNER_META, type SectionOwner } from "./section-shell";
 
 export interface SectionDef {
   key: string;
   index: number;
   title: string;
   subtitle?: string;
+  /** Department that owns this section — drives the colored ownership dot. */
+  owner?: SectionOwner;
 }
 
 export function SectionNav({
@@ -69,10 +72,17 @@ export function SectionNav({
               </div>
               <div className="min-w-0 flex-1">
                 <div className={cn(
-                  "text-sm font-medium leading-tight whitespace-nowrap lg:whitespace-normal",
+                  "text-sm font-medium leading-tight whitespace-nowrap lg:whitespace-normal flex items-center gap-1.5",
                   isActive ? "text-foreground" : "text-foreground/80"
                 )}>
-                  {s.title}
+                  {s.owner && (
+                    <span
+                      aria-hidden="true"
+                      title={`Owned by ${OWNER_META[s.owner].label}`}
+                      className={cn("h-2 w-2 rounded-full shrink-0", OWNER_META[s.owner].dot)}
+                    />
+                  )}
+                  <span>{s.title}</span>
                 </div>
                 {s.subtitle && (
                   <div className="hidden lg:block text-xs text-muted-foreground truncate mt-0.5">

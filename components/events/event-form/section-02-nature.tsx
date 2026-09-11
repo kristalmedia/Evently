@@ -20,6 +20,7 @@ export function Section2() {
       index={2}
       title="Additional Information"
       description="Equipment requirements, attachments, and any additional notes for the event."
+      owner="sales"
     >
       {/* Equipment */}
       <Controller

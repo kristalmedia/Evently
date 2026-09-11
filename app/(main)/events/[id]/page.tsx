@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { ExportPDFButton } from "@/components/events/export-pdf-button";
 import { EditEventLink } from "@/components/events/edit-event-link";
 import { BroadcastRosterTable } from "@/components/events/broadcast-roster-table";
+import { WorkflowStageActions, WorkflowStageWaiting } from "@/components/events/workflow-stage-actions";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { PriorityBadge } from "@/components/shared/priority-badge";
 import { OnAirPill, Callsign } from "@/components/shared/broadcast-marks";
@@ -57,6 +58,18 @@ export default async function EventDetailPage({
           </div>
         }
       />
+
+      {/* Post-approval workflow: shows an action panel to whoever is on the
+          hook (Manager during STAFFING_IN_PROGRESS, Finance Lead during
+          FINANCIAL_REVIEW), or a read-only status blurb to everyone else. */}
+      {(event.status === "STAFFING_IN_PROGRESS" || event.status === "FINANCIAL_REVIEW") && (
+        <>
+          <WorkflowStageActions eventId={event.id} status={event.status} userRole={user.role} />
+          {user.role !== "MANAGER" && user.role !== "FINANCE_LEAD" && user.role !== "SUPER_ADMIN" && (
+            <WorkflowStageWaiting status={event.status} />
+          )}
+        </>
+      )}
 
       {/* Quick facts */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

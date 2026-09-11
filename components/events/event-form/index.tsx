@@ -28,14 +28,14 @@ import { generateReferenceKey } from "@/lib/constants";
 import { useSessionStore } from "@/stores/session-store";
 
 const ALL_SECTIONS: SectionDef[] = [
-  { key: "s1", index: 1, title: "General Info", subtitle: "Title, description, venue, dates" },
-  { key: "s2", index: 2, title: "Additional Info", subtitle: "Equipment, attachments, notes" },
-  { key: "s3", index: 3, title: "Broadcast", subtitle: "Schedule & platforms" },
-  { key: "s4", index: 4, title: "Staff", subtitle: "Roster + auto budget" },
-  { key: "s5", index: 5, title: "Financials", subtitle: "Budget & costs" },
-  { key: "s6", index: 6, title: "Project Management", subtitle: "Tasks by phase" },
-  { key: "s7", index: 7, title: "Risk", subtitle: "Contingencies" },
-  { key: "s8", index: 8, title: "Sign-off", subtitle: "Approval & submit" },
+  { key: "s1", index: 1, title: "General Info", subtitle: "Title, description, venue, dates", owner: "sales" },
+  { key: "s2", index: 2, title: "Additional Info", subtitle: "Equipment, attachments, notes", owner: "sales" },
+  { key: "s3", index: 3, title: "Broadcast", subtitle: "Schedule & platforms", owner: "sales" },
+  { key: "s4", index: 4, title: "Staff", subtitle: "Roster + auto budget", owner: "manager" },
+  { key: "s5", index: 5, title: "Financials", subtitle: "Budget & costs", owner: "finance" },
+  { key: "s6", index: 6, title: "Project Management", subtitle: "Tasks by phase", owner: "sales" },
+  { key: "s7", index: 7, title: "Risk", subtitle: "Contingencies", owner: "sales" },
+  { key: "s8", index: 8, title: "Sign-off", subtitle: "Approval & submit", owner: "gm" },
 ];
 
 const SECTION_COMPONENTS: Record<string, React.ComponentType> = {

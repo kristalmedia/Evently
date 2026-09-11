@@ -52,6 +52,7 @@ export function Section4() {
       index={4}
       title="Staff & People Required"
       description="Roster internal + external crew. Overtime and meal allowance are calculated automatically from each shift."
+      owner="manager"
     >
       {/* Estimated staffing budget */}
       <div className="rounded-lg border-2 border-accent/30 bg-accent/5 p-5 space-y-3">

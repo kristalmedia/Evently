@@ -27,6 +27,7 @@ export function Section7() {
       index={7}
       title="Risk & Contingency"
       description="Tick the standard risk categories that apply, then rate likelihood and impact and add a contingency plan. Use 'Add custom risk' for anything not in the list."
+      owner="sales"
     >
       <Controller
         control={control}

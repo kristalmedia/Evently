@@ -35,6 +35,7 @@ export function Section5() {
       index={5}
       title="Financials & Budget"
       description="Overtime, meal allowance, equipment, and marketing costs. Overtime and meal allowance are pulled from the Section 5 roster automatically."
+      owner="finance"
     >
       {/* Auto values from Section 5 */}
       <div className="rounded-lg border bg-muted/30 p-4 space-y-3">

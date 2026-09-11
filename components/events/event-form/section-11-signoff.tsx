@@ -89,6 +89,7 @@ export function Section8() {
       index={8}
       title="Final Approval & Sign-Off"
       description="Sequential approval chain: First (Nabeng) → Second (Rudy) → Final (Jenny). Each approver sees only their own block and receives an interactive notification when it's their turn."
+      owner="gm"
     >
       {/* Authorization banner */}
       <div

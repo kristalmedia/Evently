@@ -37,6 +37,7 @@ export function Section6() {
       index={6}
       title="Project Management"
       description="Every task from concept to post-event debrief, grouped by phase. Concept & Approval uses a fixed checklist — the other phases stay free-form."
+      owner="sales"
     >
       <Controller
         control={control}
