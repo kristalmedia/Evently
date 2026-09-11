@@ -249,25 +249,26 @@ function CalendarEventChip({
           </div>
         </button>
       </HoverCardTrigger>
-      <HoverCardContent side="top" align="start" className="w-80 space-y-2.5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold leading-tight break-words">{item.title}</div>
-            <div className="text-[0.7rem] font-mono text-muted-foreground mt-0.5">
-              {formatDateRange(item.start, item.end)}
-            </div>
+      <HoverCardContent side="top" align="start" className="w-80 max-w-[calc(100vw-2rem)] space-y-2.5">
+        {/* Category badge on its own row so it doesn't compete with the
+            title for horizontal space — the earlier flex-row layout caused
+            long titles like "Taman SOAS — Weekend Broadcast" to truncate. */}
+        {item.category && (
+          <span
+            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-medium"
+            style={{
+              backgroundColor: colorFor(item.category),
+              color: readableTextColor(colorFor(item.category)),
+            }}
+          >
+            {item.category}
+          </span>
+        )}
+        <div>
+          <div className="text-sm font-semibold leading-tight break-words">{item.title}</div>
+          <div className="text-[0.7rem] font-mono text-muted-foreground mt-0.5">
+            {formatDateRange(item.start, item.end)}
           </div>
-          {item.category && (
-            <span
-              className="shrink-0 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.65rem] font-medium"
-              style={{
-                backgroundColor: colorFor(item.category),
-                color: readableTextColor(colorFor(item.category)),
-              }}
-            >
-              {item.category}
-            </span>
-          )}
         </div>
         {item.venue && (
           <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
