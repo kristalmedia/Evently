@@ -64,14 +64,14 @@ export function WorkflowStageActions({
   }
 
   async function completeFinancials() {
-    if (!confirm("Mark Financials complete? This publishes the event and notifies every user by email + in-app.")) {
+    if (!confirm("Mark Financials complete? This marks the event as PUBLISHED. Users were already notified when Jenny approved — no re-notification fires here.")) {
       return;
     }
     setBusy(true);
     try {
       const res = await fetch(`/api/events/${eventId}/complete-financials`, { method: "POST" });
       if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
-      toast.success("Financials complete — event published, all users notified", {
+      toast.success("Financials complete — event published", {
         position: "bottom-center",
       });
       router.refresh();

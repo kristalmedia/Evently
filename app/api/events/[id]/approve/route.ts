@@ -2,26 +2,32 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { approverRoleForUser, hasRole } from "@/lib/permissions";
 import {
+  broadcastNotification,
   getAllUsers,
   getEventById,
   getUserByEmail,
   logAudit,
   markNotificationActed,
   pushNotificationTo,
+  sendEmail,
   updateEvent,
 } from "@/lib/store";
 import { APPROVER_EMAILS } from "@/lib/constants";
-import type { SignOffEntry } from "@/lib/types";
+import type { EventConcept, SignOffEntry } from "@/lib/types";
 
 /**
  * Approve action — advances the event through the sequential workflow:
  *   PENDING_APPROVAL       →  Rudy (2nd) approves     → PENDING_FINAL_APPROVAL
  *   PENDING_FINAL_APPROVAL →  Jenny (Final) approves  → STAFFING_IN_PROGRESS
- *                                                       (notifies all Managers)
  *
- * Onward transitions to FINANCIAL_REVIEW (Managers finish Staff) and to
- * PUBLISHED (Putri finishes Financial + fan-out to all users) live in
- * their own /complete-staffing and /complete-financials endpoints.
+ * At Jenny's Final approve (all 3 sign-offs done), two things happen:
+ *   1. In-app notification pushed to all Managers so they know Staff is
+ *      unlocked for the post-approval fill flow.
+ *   2. The organization-wide announcement fires — broadcastNotification to
+ *      every user + SMTP email fan-out — because per product spec the
+ *      "event is approved by 3 approvers" moment is the public announcement.
+ *      /complete-financials still transitions to PUBLISHED at the end of
+ *      Putri's review but is silent (no re-notification).
  */
 export async function POST(
   req: Request,
@@ -83,15 +89,13 @@ export async function POST(
       });
     }
   } else if (stage === "FINAL_APPROVER") {
-    // Jenny's approval no longer publishes the event directly — it hands off
-    // to Managers to fill Section 5 (Staff) first. The "publish to everyone"
-    // fan-out moved to /complete-financials, which fires once Putri finishes
-    // the Financial section.
+    // 3rd of 3 approvals done. Advance to STAFFING_IN_PROGRESS so Managers
+    // fill Staff and Putri later fills Financial — but the organization-wide
+    // "new event approved" announcement fires NOW, not later.
     nextStatus = "STAFFING_IN_PROGRESS";
 
-    // Notify every active Manager that Staff is now unlocked for this event.
-    // Uses hasRole so users with Manager as their SECONDARY role are also
-    // included in the fan-out.
+    // 1. Notify every active Manager (primary or secondary role) that Staff
+    //    is now unlocked for this event.
     const managers = getAllUsers().filter(
       (u) => u.status === "active" && hasRole(u, "MANAGER")
     );
@@ -103,6 +107,21 @@ export async function POST(
         eventId: event.id,
       });
     }
+
+    // 2. Broadcast to EVERY registered user announcing the approved event.
+    broadcastNotification({
+      kind: "EVENT_PUBLISHED",
+      title: `New event approved: ${event.s1.eventName}`,
+      body: `${event.s1.eventName} (${event.s1.eventRefNo}) has been fully approved by Nabeng, Rudy and Jenny. Venue: ${event.s1.venue}.`,
+      eventId: event.id,
+    });
+
+    // 3. SMTP courtesy email to every active user with an address. Fire-and-
+    //    forget so a slow / failing transport doesn't stall Jenny's approve
+    //    response — the in-app notification above is the source of truth.
+    void notifyAllUsersOfApprovedEvent(event).catch(() => {
+      /* honest simulated=true handling already lives in sendEmail */
+    });
   }
 
   const updated = updateEvent(id, { status: nextStatus, s11: { ...event.s11, entries: nextEntries } });
@@ -117,4 +136,24 @@ export async function POST(
   });
 
   return NextResponse.json({ event: updated });
+}
+
+/**
+ * Fan out an "event approved" email to every active user with an address.
+ * Runs serially so we don't hammer the SMTP relay's concurrent-connection
+ * limit — a Kristal org is dozens, not thousands, of users.
+ */
+async function notifyAllUsersOfApprovedEvent(event: EventConcept) {
+  const recipients = getAllUsers().filter((u) => u.status === "active" && !!u.email);
+  const subject = `New event approved: ${event.s1.eventName}`;
+  const body =
+    `${event.s1.eventName} (${event.s1.eventRefNo}) has been approved by all three approvers ` +
+    `(Nabeng, Rudy, Jenny).\n\n` +
+    `Venue: ${event.s1.venue}\n` +
+    `Start: ${event.s1.startDate ? new Date(event.s1.startDate).toLocaleString("en-GB") : "TBC"}\n` +
+    (event.s1.endDate ? `End: ${new Date(event.s1.endDate).toLocaleString("en-GB")}\n` : "") +
+    `\nSee the full event brief in KEMS: /events/${event.id}\n\n— Kristal Media`;
+  for (const u of recipients) {
+    await sendEmail({ to: u.email, subject, body });
+  }
 }

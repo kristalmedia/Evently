@@ -1,23 +1,18 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { hasAnyRole } from "@/lib/permissions";
-import {
-  broadcastNotification,
-  getAllUsers,
-  getEventById,
-  logAudit,
-  sendEmail,
-  updateEvent,
-} from "@/lib/store";
-import type { EventConcept } from "@/lib/types";
+import { getEventById, logAudit, updateEvent } from "@/lib/store";
 
 /**
  * Finance Lead (Putri) calls this to finalize Section 5 (Financial) once
- * Managers have completed Staff. This is the terminal step of the
- * post-approval flow — status FINANCIAL_REVIEW → PUBLISHED, and the
- * "new event" notification + email fan-out to every active user fires
- * here (moved from the /approve handler, where Jenny's approval used
- * to trigger it).
+ * Managers have completed Staff. Terminal step of the post-approval flow —
+ * status FINANCIAL_REVIEW → PUBLISHED.
+ *
+ * SILENT by design: the organization-wide "new event approved" fan-out
+ * (broadcastNotification + SMTP email) already fired earlier, at Jenny's
+ * FINAL_APPROVER approve step in /approve. Re-firing here would double-
+ * notify every user for the same event, so this endpoint only records the
+ * transition + audit line.
  */
 export async function POST(
   _req: Request,
@@ -52,42 +47,13 @@ export async function POST(
   const updated = updateEvent(id, { status: "PUBLISHED" });
   if (!updated) return NextResponse.json({ error: "Update failed" }, { status: 500 });
 
-  // 1. In-app notification broadcast — the source-of-truth channel.
-  broadcastNotification({
-    kind: "EVENT_PUBLISHED",
-    title: `New upcoming event: ${event.s1.eventName}`,
-    body: `${event.s1.eventName} (${event.s1.eventRefNo}) has been fully approved and finalized. Venue: ${event.s1.venue}.`,
-    eventId: event.id,
-  });
-
-  // 2. SMTP courtesy email. Fire-and-forget so a slow/failing transport
-  //    doesn't stall the response — the notification above already reached
-  //    everyone via the app itself.
-  void notifyAllUsersOfPublishedEvent(updated).catch(() => {
-    /* honest simulated=true handling already lives in sendEmail */
-  });
-
   logAudit({
     kind: "STATUS_CHANGED",
     actor: user,
     eventId: event.id,
     eventRefNo: event.s1.eventRefNo,
-    details: `Financials completed by ${user.fullName} → PUBLISHED (all-user fan-out fired)`,
+    details: `Financials completed by ${user.fullName} → PUBLISHED (no user-visible re-notification; fan-out already fired at Jenny's approve)`,
   });
 
   return NextResponse.json({ event: updated });
-}
-
-async function notifyAllUsersOfPublishedEvent(event: EventConcept) {
-  const recipients = getAllUsers().filter((u) => u.status === "active" && !!u.email);
-  const subject = `New event published: ${event.s1.eventName}`;
-  const body =
-    `${event.s1.eventName} (${event.s1.eventRefNo}) has been fully approved and is now published.\n\n` +
-    `Venue: ${event.s1.venue}\n` +
-    `Start: ${event.s1.startDate ? new Date(event.s1.startDate).toLocaleString("en-GB") : "TBC"}\n` +
-    (event.s1.endDate ? `End: ${new Date(event.s1.endDate).toLocaleString("en-GB")}\n` : "") +
-    `\nSee the full event brief in KEMS: /events/${event.id}\n\n— Kristal Media`;
-  for (const u of recipients) {
-    await sendEmail({ to: u.email, subject, body });
-  }
 }
