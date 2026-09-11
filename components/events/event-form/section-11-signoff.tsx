@@ -1,9 +1,9 @@
 "use client";
 
-import { Controller, useFormContext } from "react-hook-form";
+import { Controller, useFormContext, useWatch } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { CheckCircle2, EyeOff, Lock, ShieldCheck, Send, XCircle } from "lucide-react";
+import { CheckCircle2, EyeOff, Lock, ShieldCheck, Send, XCircle, Zap } from "lucide-react";
 import { toast } from "sonner";
 
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { SectionShell } from "./section-shell";
 import { APPROVER_LABEL, APPROVER_SEQUENCE } from "@/lib/constants";
-import { approverRoleForUser, canSignOff, isSuperAdmin } from "@/lib/permissions";
+import { approverRoleForUser, can, canSignOff, isSuperAdmin } from "@/lib/permissions";
 import { useSessionStore } from "@/stores/session-store";
 import type { EventConceptForm } from "@/lib/validation/event-schema";
 import type { ApproverRole, SignOffEntry } from "@/lib/types";
@@ -34,6 +34,16 @@ export function Section8() {
   const [submitting, setSubmitting] = useState(false);
   const [denyOpen, setDenyOpen] = useState<false | ApproverRole>(false);
   const [denyReason, setDenyReason] = useState("");
+
+  // Watch classification so the render (approval blocks vs paid submit
+  // callout) reacts to the user flipping the Commercial / Community toggle
+  // in Section 2 without needing a form reset.
+  const classification = useWatch({ control, name: "s2.classification" });
+  const isPaidEvent = classification === "COMMERCIAL";
+  // Paid events skip the approval chain entirely — anyone with events.create
+  // permission can submit them. Free events keep the FIRST_APPROVER-only
+  // submit gate (Nabeng initiates the Nabeng → Rudy → Jenny chain).
+  const canSubmitPaid = isPaidEvent && can(user, "events.create");
 
   // Strict isolation (spec §5): approvers only see their assigned block.
   function canView(slotRole: ApproverRole): boolean {
@@ -84,13 +94,70 @@ export function Section8() {
     }
   }
 
+  /**
+   * Paid (COMMERCIAL) submit — skips the Nabeng → Rudy → Jenny chain and
+   * drops the event directly into STAFFING_IN_PROGRESS so Managers can
+   * fill the roster and Putri can review Financials. The server-side
+   * events POST detects `status = STAFFING_IN_PROGRESS + COMMERCIAL` and
+   * fires the same Manager + org-wide fan-out that Jenny's approve fires
+   * for free events, via lib/event-notifications.ts.
+   *
+   * We do NOT stamp any s11.entries here — no one signed off, and
+   * pretending an approver signed would be dishonest in the audit trail.
+   */
+  async function submitPaidEvent() {
+    setSubmitting(true);
+    try {
+      const values = getValues();
+      const payload = {
+        ...values,
+        status: "STAFFING_IN_PROGRESS",
+        priority: values.priority ?? "MEDIUM",
+        // Keep s11 as-is (typically empty entries) — this event never went
+        // through the approval chain, so no signatures to record.
+      };
+      const res = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
+      const { event } = await res.json();
+      toast.success("Paid event submitted — no approval needed, Managers notified for staffing", {
+        position: "bottom-center",
+      });
+      router.push(`/events/${event.id}`);
+      router.refresh();
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <SectionShell
       index={8}
-      title="Final Approval & Sign-Off"
-      description="Sequential approval chain: First (Nabeng) → Second (Rudy) → Final (Jenny). Each approver sees only their own block and receives an interactive notification when it's their turn."
+      title={isPaidEvent ? "Submit Event (paid — no approval needed)" : "Final Approval & Sign-Off"}
+      description={
+        isPaidEvent
+          ? "Paid engagements skip the Nabeng → Rudy → Jenny approval chain. Submit sends the event straight into staffing and notifies every user."
+          : "Sequential approval chain: First (Nabeng) → Second (Rudy) → Final (Jenny). Each approver sees only their own block and receives an interactive notification when it's their turn."
+      }
       owner="gm"
     >
+      {/* Paid events don't run the sign-off chain — render the paid submit
+          callout only and stop here. Managers still fill Staff and the
+          Finance Lead still fills Financial post-submit; the whole approval
+          UI just doesn't apply. */}
+      {isPaidEvent ? (
+        <PaidSubmitCallout
+          canSubmit={canSubmitPaid}
+          submitting={submitting}
+          onSubmit={submitPaidEvent}
+        />
+      ) : (
+        <>
       {/* Authorization banner */}
       <div
         className={`rounded-lg border p-4 flex items-start gap-3 ${
@@ -291,8 +358,11 @@ export function Section8() {
           The Submit button only appears for the First Approver (Nabeng).
         </div>
       )}
+        </>
+      )}
 
-      {/* Denial modal */}
+      {/* Denial modal (only relevant for the free approval-chain path — safe
+          to render for paid too since it doesn't self-open). */}
       <Dialog open={!!denyOpen} onOpenChange={(v) => !v && setDenyOpen(false)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -333,5 +403,62 @@ export function Section8() {
         </DialogContent>
       </Dialog>
     </SectionShell>
+  );
+}
+
+/**
+ * Paid (commercial) event submit UI — replaces the 3-block sign-off chain
+ * on the Sign-off section when Section 2's classification is COMMERCIAL.
+ * The button POSTs the event with status = STAFFING_IN_PROGRESS; the server
+ * detects that + classification and fires the Manager + org-wide fan-out.
+ */
+function PaidSubmitCallout({
+  canSubmit,
+  submitting,
+  onSubmit,
+}: {
+  canSubmit: boolean;
+  submitting: boolean;
+  onSubmit: () => void;
+}) {
+  return (
+    <div className="rounded-lg border-2 border-signal-400/40 bg-signal-500/[0.04] p-5 space-y-4">
+      <div className="flex items-start gap-3">
+        <Zap className="h-5 w-5 text-signal-500 shrink-0 mt-0.5" />
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="text-sm font-semibold">Paid engagement — no approval chain</div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            The event is classified as <span className="font-medium">Commercial / Paid</span>{" "}
+            in Section 2, so it skips the Nabeng → Rudy → Jenny sign-off. Submitting
+            drops it straight into <span className="font-mono text-[0.7rem]">STAFFING_IN_PROGRESS</span>:
+            Managers are notified to fill the roster, then the Finance Lead reviews Financials.
+            An <span className="font-medium">"event created"</span> in-app broadcast and email
+            fan out to every user immediately on submit.
+          </p>
+        </div>
+      </div>
+
+      {canSubmit ? (
+        <Button
+          type="button"
+          variant="accent"
+          size="lg"
+          disabled={submitting}
+          onClick={onSubmit}
+          className="gap-2"
+        >
+          <Send className="h-4 w-4" />
+          {submitting ? "Submitting…" : "Submit paid event"}
+        </Button>
+      ) : (
+        <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground flex items-start gap-2">
+          <Lock className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>
+            The submit button only appears for users with event-creation permission
+            (Sales Admin, CCM Admin, or Super Admin).
+          </span>
+        </div>
+      )}
+    </div>
   );
 }

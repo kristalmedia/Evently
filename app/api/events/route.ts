@@ -10,6 +10,7 @@ import {
   nextSequentialRefKey,
   pushNotificationTo,
 } from "@/lib/store";
+import { announceApprovedEvent } from "@/lib/event-notifications";
 import { APPROVER_EMAILS } from "@/lib/constants";
 import type { EventConcept } from "@/lib/types";
 
@@ -57,9 +58,14 @@ export async function POST(req: Request) {
 
   const submitter = session!.user;
 
-  // Audit log
+  // Audit log — DRAFT_SAVED for silent drafts, EVENT_CREATED for anything
+  // that actually enters a live workflow state (approval chain OR the
+  // paid skip-approval path landing directly in STAFFING_IN_PROGRESS).
+  const isLiveSubmission =
+    created.status === "PENDING_APPROVAL" ||
+    created.status === "STAFFING_IN_PROGRESS";
   logAudit({
-    kind: created.status === "PENDING_APPROVAL" ? "EVENT_CREATED" : "DRAFT_SAVED",
+    kind: isLiveSubmission ? "EVENT_CREATED" : "DRAFT_SAVED",
     actor: submitter,
     eventId: created.id,
     eventRefNo: created.s1.eventRefNo,
@@ -69,7 +75,7 @@ export async function POST(req: Request) {
   // Sequential approval workflow (spec §5) — STRICT ISOLATION.
   // Only the next approver is notified. No cross-firing, no broadcast noise.
   if (created.status === "PENDING_APPROVAL") {
-    // First Approver (Nabeng) submitted — target Rudy only.
+    // First Approver (Nabeng) submitted a FREE event — target Rudy only.
     const rudy = getUserByEmail(APPROVER_EMAILS.SECOND_APPROVER);
     if (rudy) {
       pushNotificationTo(rudy.id, {
@@ -80,6 +86,18 @@ export async function POST(req: Request) {
         approverStage: "SECOND_APPROVER",
       });
     }
+  } else if (
+    created.status === "STAFFING_IN_PROGRESS" &&
+    created.s2?.classification === "COMMERCIAL"
+  ) {
+    // Paid (COMMERCIAL) events skip the approval chain by product design —
+    // client submits them directly into STAFFING_IN_PROGRESS. Fire the same
+    // Manager + org-wide announcement that Jenny's approve would fire for
+    // a free event, via the shared helper. Fire-and-forget: don't block
+    // the POST response on SMTP.
+    void announceApprovedEvent(created, { source: "paid_submission" }).catch(() => {
+      /* honest simulated=true handling already lives in sendEmail */
+    });
   }
   // Draft saves are intentionally NOT broadcast — silent persistence to
   // avoid notification noise for every keystroke-triggered save.

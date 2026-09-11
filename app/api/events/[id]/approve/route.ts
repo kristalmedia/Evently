@@ -1,19 +1,17 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { approverRoleForUser, hasRole } from "@/lib/permissions";
+import { approverRoleForUser } from "@/lib/permissions";
 import {
-  broadcastNotification,
-  getAllUsers,
   getEventById,
   getUserByEmail,
   logAudit,
   markNotificationActed,
   pushNotificationTo,
-  sendEmail,
   updateEvent,
 } from "@/lib/store";
+import { announceApprovedEvent } from "@/lib/event-notifications";
 import { APPROVER_EMAILS } from "@/lib/constants";
-import type { EventConcept, SignOffEntry } from "@/lib/types";
+import type { SignOffEntry } from "@/lib/types";
 
 /**
  * Approve action — advances the event through the sequential workflow:
@@ -90,36 +88,11 @@ export async function POST(
     }
   } else if (stage === "FINAL_APPROVER") {
     // 3rd of 3 approvals done. Advance to STAFFING_IN_PROGRESS so Managers
-    // fill Staff and Putri later fills Financial — but the organization-wide
-    // "new event approved" announcement fires NOW, not later.
+    // fill Staff and Putri later fills Financial. The organization-wide
+    // announcement (Manager fan-out + broadcast + SMTP) fires now via the
+    // shared helper — the paid-submission path uses the same helper.
     nextStatus = "STAFFING_IN_PROGRESS";
-
-    // 1. Notify every active Manager (primary or secondary role) that Staff
-    //    is now unlocked for this event.
-    const managers = getAllUsers().filter(
-      (u) => u.status === "active" && hasRole(u, "MANAGER")
-    );
-    for (const m of managers) {
-      pushNotificationTo(m.id, {
-        kind: "APPROVAL_GRANTED",
-        title: `Staff section unlocked: ${event.s1.eventName}`,
-        body: `Jenny finalized the event brief. Please fill the Staff section (roster + shifts) so Putri can complete the Financial review.`,
-        eventId: event.id,
-      });
-    }
-
-    // 2. Broadcast to EVERY registered user announcing the approved event.
-    broadcastNotification({
-      kind: "EVENT_PUBLISHED",
-      title: `New event approved: ${event.s1.eventName}`,
-      body: `${event.s1.eventName} (${event.s1.eventRefNo}) has been fully approved by Nabeng, Rudy and Jenny. Venue: ${event.s1.venue}.`,
-      eventId: event.id,
-    });
-
-    // 3. SMTP courtesy email to every active user with an address. Fire-and-
-    //    forget so a slow / failing transport doesn't stall Jenny's approve
-    //    response — the in-app notification above is the source of truth.
-    void notifyAllUsersOfApprovedEvent(event).catch(() => {
+    void announceApprovedEvent(event, { source: "final_approval" }).catch(() => {
       /* honest simulated=true handling already lives in sendEmail */
     });
   }
@@ -136,24 +109,4 @@ export async function POST(
   });
 
   return NextResponse.json({ event: updated });
-}
-
-/**
- * Fan out an "event approved" email to every active user with an address.
- * Runs serially so we don't hammer the SMTP relay's concurrent-connection
- * limit — a Kristal org is dozens, not thousands, of users.
- */
-async function notifyAllUsersOfApprovedEvent(event: EventConcept) {
-  const recipients = getAllUsers().filter((u) => u.status === "active" && !!u.email);
-  const subject = `New event approved: ${event.s1.eventName}`;
-  const body =
-    `${event.s1.eventName} (${event.s1.eventRefNo}) has been approved by all three approvers ` +
-    `(Nabeng, Rudy, Jenny).\n\n` +
-    `Venue: ${event.s1.venue}\n` +
-    `Start: ${event.s1.startDate ? new Date(event.s1.startDate).toLocaleString("en-GB") : "TBC"}\n` +
-    (event.s1.endDate ? `End: ${new Date(event.s1.endDate).toLocaleString("en-GB")}\n` : "") +
-    `\nSee the full event brief in KEMS: /events/${event.id}\n\n— Kristal Media`;
-  for (const u of recipients) {
-    await sendEmail({ to: u.email, subject, body });
-  }
 }
