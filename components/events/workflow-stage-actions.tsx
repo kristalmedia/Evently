@@ -23,19 +23,22 @@ import type { EventStatus, Role } from "@/lib/types";
 export function WorkflowStageActions({
   eventId,
   status,
-  userRole,
+  userRoles,
 }: {
   eventId: string;
   status: EventStatus;
-  userRole: Role | null | undefined;
+  /** All roles the user holds (primary first, optional secondary second).
+   *  Passed as an array so this component doesn't need to import server-only
+   *  helpers to check both roles. */
+  userRoles: Role[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
-  if (!userRole) return null;
-  const isSuper = userRole === "SUPER_ADMIN";
-  const isManager = userRole === "MANAGER" || isSuper;
-  const isFinanceLead = userRole === "FINANCE_LEAD" || isSuper;
+  const holds = (r: Role) => userRoles.includes(r);
+  const isSuper = holds("SUPER_ADMIN");
+  const isManager = holds("MANAGER") || isSuper;
+  const isFinanceLead = holds("FINANCE_LEAD") || isSuper;
 
   const showStaffing = status === "STAFFING_IN_PROGRESS" && isManager;
   const showFinancials = status === "FINANCIAL_REVIEW" && isFinanceLead;

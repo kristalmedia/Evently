@@ -60,8 +60,13 @@ export function UserMenu() {
             <span className="text-xs text-muted-foreground truncate">
               {user.email}
             </span>
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex flex-wrap items-center gap-2 pt-1">
               <Badge variant="signal">{ROLE_LABEL[user.role]}</Badge>
+              {user.secondaryRole && (
+                <Badge variant="outline" title="Secondary role — unions permissions with primary">
+                  + {ROLE_LABEL[user.secondaryRole]}
+                </Badge>
+              )}
               <Badge variant="outline">{user.department}</Badge>
             </div>
           </div>

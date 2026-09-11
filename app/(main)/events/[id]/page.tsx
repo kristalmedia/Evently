@@ -12,7 +12,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { PriorityBadge } from "@/components/shared/priority-badge";
 import { OnAirPill, Callsign } from "@/components/shared/broadcast-marks";
 import { requireSession } from "@/lib/auth";
-import { canViewBudget, canEditEvent } from "@/lib/permissions";
+import { canViewBudget, canEditEvent, hasAnyRole, rolesFor } from "@/lib/permissions";
 import { getEventById, projectRow } from "@/lib/store";
 import { formatBND, formatDateTime } from "@/lib/utils";
 import { calculateStaffing, formatDayDate } from "@/lib/roster-calc";
@@ -64,8 +64,8 @@ export default async function EventDetailPage({
           FINANCIAL_REVIEW), or a read-only status blurb to everyone else. */}
       {(event.status === "STAFFING_IN_PROGRESS" || event.status === "FINANCIAL_REVIEW") && (
         <>
-          <WorkflowStageActions eventId={event.id} status={event.status} userRole={user.role} />
-          {user.role !== "MANAGER" && user.role !== "FINANCE_LEAD" && user.role !== "SUPER_ADMIN" && (
+          <WorkflowStageActions eventId={event.id} status={event.status} userRoles={rolesFor(user)} />
+          {!hasAnyRole(user, ["MANAGER", "FINANCE_LEAD", "SUPER_ADMIN"]) && (
             <WorkflowStageWaiting status={event.status} />
           )}
         </>

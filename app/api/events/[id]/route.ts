@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { can, canDeleteEvent, canEditEvent } from "@/lib/permissions";
+import { can, canDeleteEvent, canEditEvent, hasRole } from "@/lib/permissions";
 import { deleteEvent, getEventById, logAudit, updateEvent } from "@/lib/store";
 import type { EventConcept } from "@/lib/types";
 
@@ -43,7 +43,10 @@ export async function PATCH(
         changed.push(k);
       }
     }
-    if (user.role === "SALES_ADMIN" && changed.length > 0) {
+    // Sales-attribution audit — fires for anyone holding Sales Admin as
+    // primary or secondary role, so a Manager + Sales-Admin combo still
+    // gets the same detailed audit trail on their edits.
+    if (hasRole(user, "SALES_ADMIN") && changed.length > 0) {
       details = `Sales Admin edit — sections modified: ${changed.join(", ")}`;
     } else if (changed.length > 0) {
       details = `${user.role} edit — sections modified: ${changed.join(", ")}`;

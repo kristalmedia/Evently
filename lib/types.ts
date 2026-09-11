@@ -45,7 +45,18 @@ export interface User {
   email: string; // @kristal.media
   department: Department;
   jobTitle?: string;
+  /**
+   * Primary role — everyone has one. Drives the badge shown in the user
+   * menu, the department dropdown default, and audit trail attribution.
+   */
   role: Role;
+  /**
+   * Optional secondary role. When present, ALL permission checks union
+   * the two roles' allowed permissions (see `can()` in permissions.ts):
+   * whichever role is more permissive wins. Common use case: a Manager
+   * who also acts as Sales Admin gets both surfaces.
+   */
+  secondaryRole?: Role;
   status: "active" | "disabled";
   /** Onboarding pipeline — INVITED until they set a password via /auth/set-password */
   verificationStatus: VerificationStatus;

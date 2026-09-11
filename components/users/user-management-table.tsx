@@ -92,6 +92,9 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
   const [editing, setEditing] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editRole, setEditRole] = useState<Role>("VIEWER");
+  /** Optional secondary role. Empty string = none — sentinel used because
+   *  Radix Select doesn't distinguish undefined vs "not selected". */
+  const [editSecondaryRole, setEditSecondaryRole] = useState<Role | "">("");
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
@@ -180,11 +183,13 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
     setEditing(u.id);
     setEditName(u.fullName);
     setEditRole(u.role);
+    setEditSecondaryRole(u.secondaryRole ?? "");
   }
 
   function cancelEdit() {
     setEditing(null);
     setEditName("");
+    setEditSecondaryRole("");
   }
 
   async function doDelete() {
@@ -216,10 +221,22 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
       toast.error("Name must be at least 2 characters");
       return;
     }
+    // Reject secondary === primary (a user shouldn't "hold" the same role
+    // twice — permission checks would do the same work anyway).
+    if (editSecondaryRole && editSecondaryRole === editRole) {
+      toast.error("Secondary role must differ from primary role");
+      return;
+    }
     const res = await fetch(`/api/users/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fullName: trimmed, role: editRole }),
+      body: JSON.stringify({
+        fullName: trimmed,
+        role: editRole,
+        // Explicit null (not undefined) tells the API "clear the secondary role"
+        // — matches the "None" option in the dropdown.
+        secondaryRole: editSecondaryRole === "" ? null : editSecondaryRole,
+      }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -312,25 +329,52 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
                     </TableCell>
                     <TableCell>
                       {isEditing ? (
-                        <Select
-                          value={editRole}
-                          onValueChange={(v) => setEditRole(v as Role)}
-                        >
-                          <SelectTrigger className="w-[180px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ROLES.map((r) => (
-                              <SelectItem key={r} value={r}>
-                                {ROLE_LABEL[r]}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div className="space-y-1.5">
+                          <Select
+                            value={editRole}
+                            onValueChange={(v) => setEditRole(v as Role)}
+                          >
+                            <SelectTrigger className="w-[180px]" aria-label="Primary role">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ROLES.map((r) => (
+                                <SelectItem key={r} value={r}>
+                                  {ROLE_LABEL[r]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={editSecondaryRole === "" ? "__NONE__" : editSecondaryRole}
+                            onValueChange={(v) =>
+                              setEditSecondaryRole(v === "__NONE__" ? "" : (v as Role))
+                            }
+                          >
+                            <SelectTrigger className="w-[180px]" aria-label="Secondary role (optional)">
+                              <SelectValue placeholder="+ Secondary role (optional)" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__NONE__">— None —</SelectItem>
+                              {ROLES.filter((r) => r !== editRole).map((r) => (
+                                <SelectItem key={r} value={r}>
+                                  {ROLE_LABEL[r]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       ) : (
-                        <Badge variant={u.role === "SUPER_ADMIN" ? "amber" : "signal"}>
-                          {ROLE_LABEL[u.role]}
-                        </Badge>
+                        <div className="flex flex-col items-start gap-1">
+                          <Badge variant={u.role === "SUPER_ADMIN" ? "amber" : "signal"}>
+                            {ROLE_LABEL[u.role]}
+                          </Badge>
+                          {u.secondaryRole && (
+                            <Badge variant="outline" className="text-[0.62rem]">
+                              + {ROLE_LABEL[u.secondaryRole]}
+                            </Badge>
+                          )}
+                        </div>
                       )}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell text-sm font-mono text-muted-foreground">
@@ -443,7 +487,7 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
               This cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          {deleteTarget?.role === "SUPER_ADMIN" && (
+          {(deleteTarget?.role === "SUPER_ADMIN" || deleteTarget?.secondaryRole === "SUPER_ADMIN") && (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs">
               <span className="font-medium">Warning:</span> This is a Super Admin
               account. Make sure other Super Admins remain who can manage the

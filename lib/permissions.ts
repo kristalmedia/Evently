@@ -91,8 +91,34 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
 };
 
+/**
+ * All roles a user holds — primary + optional secondary. Order matters:
+ * the primary is always index 0, which some UI surfaces (badges,
+ * attribution strings) prefer.
+ */
+export function rolesFor(user: User | null | undefined): Role[] {
+  if (!user) return [];
+  return user.secondaryRole ? [user.role, user.secondaryRole] : [user.role];
+}
+
+/**
+ * Does the user hold this specific role, either as primary or secondary?
+ * The right call in place of a raw `user.role === "X"` check anywhere in
+ * the codebase — otherwise the secondary role goes ignored.
+ */
+export function hasRole(user: User | null | undefined, role: Role): boolean {
+  if (!user) return false;
+  return user.role === role || user.secondaryRole === role;
+}
+
+/** True if the user holds any of the given roles (primary or secondary). */
+export function hasAnyRole(user: User | null | undefined, roles: readonly Role[]): boolean {
+  if (!user) return false;
+  return roles.includes(user.role) || (!!user.secondaryRole && roles.includes(user.secondaryRole));
+}
+
 export function isSuperAdmin(user: User | null | undefined): boolean {
-  return !!user && user.role === "SUPER_ADMIN" && user.status === "active";
+  return !!user && hasRole(user, "SUPER_ADMIN") && user.status === "active";
 }
 /** @deprecated Use isSuperAdmin. */
 export const isITAdmin = isSuperAdmin;
@@ -104,12 +130,16 @@ export function permissionsFor(role: Role): Permission[] {
 export function can(user: User | null | undefined, perm: Permission): boolean {
   if (!user) return false;
   if (user.status === "disabled") return false;
-  // Super Admin bypass — except sign-off (reserved for the 3 approvers)
+  // Super Admin bypass — except sign-off (reserved for the 3 approvers).
   if (isSuperAdmin(user)) {
     if (perm === "events.signoff") return false;
     return true;
   }
-  return ROLE_PERMISSIONS[user.role].includes(perm);
+  // Union of primary + secondary role permissions — more permissive wins.
+  for (const r of rolesFor(user)) {
+    if (ROLE_PERMISSIONS[r].includes(perm)) return true;
+  }
+  return false;
 }
 
 export function canAny(user: User | null | undefined, perms: Permission[]): boolean {
@@ -162,7 +192,7 @@ export function canDeleteEvent(user: User | null | undefined): boolean {
 export function canEditEvent(user: User | null | undefined): boolean {
   if (!user) return false;
   if (isSuperAdmin(user)) return true;
-  return ["SALES_ADMIN", "CCM_ADMIN", "MANAGER", "FINANCE_LEAD"].includes(user.role);
+  return hasAnyRole(user, ["SALES_ADMIN", "CCM_ADMIN", "MANAGER", "FINANCE_LEAD"]);
 }
 
 export function canCancelEvent(user: User | null | undefined): boolean {
@@ -192,46 +222,84 @@ export function canApproveNow(
 const NON_STAFF_NON_FINANCIAL: readonly string[] = ["s1", "s2", "s3", "s6", "s7", "s8"];
 
 /**
+ * Per-role editable section list for a specific event status. Kept as a
+ * pure function of (role, status) so multi-role users can union results
+ * from both their primary and secondary role. Returns null for roles that
+ * hold no section-edit rights — cleaner to union than a `[]` sentinel.
+ */
+function editableSectionsForRoleOnEvent(
+  role: Role,
+  eventStatus: string | undefined
+): string[] | "all" | null {
+  switch (role) {
+    case "SUPER_ADMIN":
+      return "all";
+    case "SALES_ADMIN":
+    case "CCM_ADMIN":
+      // Staff (s4) and Financial (s5) are permanently hidden — Sales/CCM
+      // never fill those, at any stage.
+      return [...NON_STAFF_NON_FINANCIAL];
+    case "MANAGER": {
+      const keys = ["s1", "s8"];
+      if (eventStatus === "STAFFING_IN_PROGRESS") keys.push("s4");
+      return keys;
+    }
+    case "FINANCE_LEAD":
+      if (eventStatus === "FINANCIAL_REVIEW") return ["s5"];
+      return [];
+    case "FINANCIAL_ADMIN":
+    case "HR":
+    case "VIEWER":
+    default:
+      return null;
+  }
+}
+
+/** Same shape as above but for the max-possible surface (no event yet). */
+function editableSectionsForRoleMax(role: Role): string[] | "all" | null {
+  switch (role) {
+    case "SUPER_ADMIN":
+      return "all";
+    case "SALES_ADMIN":
+    case "CCM_ADMIN":
+      return [...NON_STAFF_NON_FINANCIAL];
+    case "MANAGER":
+      return ["s1", "s4", "s8"];
+    case "FINANCE_LEAD":
+      return ["s5"];
+    default:
+      return null;
+  }
+}
+
+/** Union multiple per-role results into a single deduped list (or "all"). */
+function unionEditable(results: (string[] | "all" | null)[]): string[] | "all" {
+  if (results.some((r) => r === "all")) return "all";
+  const set = new Set<string>();
+  for (const r of results) {
+    if (Array.isArray(r)) for (const k of r) set.add(k);
+  }
+  return Array.from(set);
+}
+
+/**
  * Which display-section keys a user is allowed to edit ON A SPECIFIC EVENT.
  * The event.status matters because Manager Staff access and Finance Lead
  * Financial access both unlock only at specific stages of the workflow.
  * Callers that don't have an event in hand should use `editableSectionKeys`
  * (below) which returns the role's *maximum* possible edit surface.
+ *
+ * Multi-role users get the UNION of both roles' allowances — more
+ * permissive wins.
  */
 export function editableSectionKeysForEvent(
   user: User | null | undefined,
   event: { status: string } | null | undefined
 ): string[] | "all" {
   if (!user || user.status === "disabled") return [];
-  if (isSuperAdmin(user)) return "all";
-
-  switch (user.role) {
-    case "SALES_ADMIN":
-    case "CCM_ADMIN":
-      // Staff (s4) and Financial (s5) are permanently hidden from Sales/CCM
-      // — they never fill those, at any stage. Everything else is theirs.
-      return [...NON_STAFF_NON_FINANCIAL];
-
-    case "MANAGER": {
-      // Always: General Info (s1) + Sign-off (s8). Staff (s4) only unlocks
-      // after Jenny finalizes the event.
-      const keys = ["s1", "s8"];
-      if (event?.status === "STAFFING_IN_PROGRESS") keys.push("s4");
-      return keys;
-    }
-
-    case "FINANCE_LEAD":
-      // Putri — exclusive Financial editor, and only during the review stage.
-      // Read-only at every other stage; enforced separately by canViewBudget.
-      if (event?.status === "FINANCIAL_REVIEW") return ["s5"];
-      return [];
-
-    case "FINANCIAL_ADMIN":
-    case "HR":
-    case "VIEWER":
-    default:
-      return [];
-  }
+  return unionEditable(
+    rolesFor(user).map((r) => editableSectionsForRoleOnEvent(r, event?.status))
+  );
 }
 
 /**
@@ -241,19 +309,7 @@ export function editableSectionKeysForEvent(
  */
 export function editableSectionKeys(user: User | null | undefined): string[] | "all" {
   if (!user || user.status === "disabled") return [];
-  if (isSuperAdmin(user)) return "all";
-
-  switch (user.role) {
-    case "SALES_ADMIN":
-    case "CCM_ADMIN":
-      return [...NON_STAFF_NON_FINANCIAL];
-    case "MANAGER":
-      return ["s1", "s4", "s8"];
-    case "FINANCE_LEAD":
-      return ["s5"];
-    default:
-      return [];
-  }
+  return unionEditable(rolesFor(user).map((r) => editableSectionsForRoleMax(r)));
 }
 
 export function canEditSection(user: User | null | undefined, sectionKey: string): boolean {

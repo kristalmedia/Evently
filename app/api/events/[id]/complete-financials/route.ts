@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { hasAnyRole } from "@/lib/permissions";
 import {
   broadcastNotification,
   getAllUsers,
@@ -27,7 +28,8 @@ export async function POST(
   if (!user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
   // Only the Finance Lead(s) or a Super Admin can close out Financials.
-  if (user.role !== "FINANCE_LEAD" && user.role !== "SUPER_ADMIN") {
+  // Secondary-role Finance Leads count too.
+  if (!hasAnyRole(user, ["FINANCE_LEAD", "SUPER_ADMIN"])) {
     return NextResponse.json(
       { error: "Only the Finance Lead can complete Financials." },
       { status: 403 }

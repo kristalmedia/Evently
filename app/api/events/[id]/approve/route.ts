@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { approverRoleForUser } from "@/lib/permissions";
+import { approverRoleForUser, hasRole } from "@/lib/permissions";
 import {
   getAllUsers,
   getEventById,
@@ -90,8 +90,10 @@ export async function POST(
     nextStatus = "STAFFING_IN_PROGRESS";
 
     // Notify every active Manager that Staff is now unlocked for this event.
+    // Uses hasRole so users with Manager as their SECONDARY role are also
+    // included in the fan-out.
     const managers = getAllUsers().filter(
-      (u) => u.status === "active" && u.role === "MANAGER"
+      (u) => u.status === "active" && hasRole(u, "MANAGER")
     );
     for (const m of managers) {
       pushNotificationTo(m.id, {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { hasAnyRole, hasRole } from "@/lib/permissions";
 import {
   getAllUsers,
   getEventById,
@@ -23,7 +24,8 @@ export async function POST(
   if (!user) return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
 
   // Only Managers (or a Super Admin acting on their behalf) can complete Staff.
-  if (user.role !== "MANAGER" && user.role !== "SUPER_ADMIN") {
+  // Secondary-role Managers count too.
+  if (!hasAnyRole(user, ["MANAGER", "SUPER_ADMIN"])) {
     return NextResponse.json(
       { error: "Only Managers can mark Staff complete." },
       { status: 403 }
@@ -46,9 +48,10 @@ export async function POST(
   const updated = updateEvent(id, { status: "FINANCIAL_REVIEW" });
 
   // Notify all Finance Leads (typically just Putri, but future-proofed in
-  // case another Finance Lead is added later).
+  // case another Finance Lead is added later). hasRole picks up secondary-
+  // role Finance Leads too.
   const financeLeads = getAllUsers().filter(
-    (u) => u.status === "active" && u.role === "FINANCE_LEAD"
+    (u) => u.status === "active" && hasRole(u, "FINANCE_LEAD")
   );
   for (const fl of financeLeads) {
     pushNotificationTo(fl.id, {
