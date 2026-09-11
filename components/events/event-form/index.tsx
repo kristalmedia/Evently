@@ -23,7 +23,7 @@ import {
   eventConceptSchema,
   type EventConceptForm,
 } from "@/lib/validation/event-schema";
-import { canViewBudget, editableSectionKeys } from "@/lib/permissions";
+import { canViewBudget, editableSectionKeysForEvent } from "@/lib/permissions";
 import { generateReferenceKey } from "@/lib/constants";
 import { useSessionStore } from "@/stores/session-store";
 
@@ -96,17 +96,28 @@ export function EventForm({
   const router = useRouter();
   const user = useSessionStore((s) => s.user);
   const showBudget = canViewBudget(user);
-  const editableKeys = editableSectionKeys(user);
 
-  // Section 5 (Financials) hidden from users without budget.view.
-  // In edit mode, further restrict to sections the user's role can edit.
+  // Role-and-status-aware section filter.
+  //   - Sales / CCM Admin never see Staff (s4) or Financial (s5) at any stage.
+  //   - Manager sees Staff (s4) only when event.status === STAFFING_IN_PROGRESS.
+  //   - Finance Lead sees Financial (s5) only when status === FINANCIAL_REVIEW.
+  //   - Super Admin sees everything.
+  // For a brand-new event there is no event yet, so we synthesize a DRAFT
+  // status — matches the initial state the form saves as.
+  const editableKeys = editableSectionKeysForEvent(
+    user,
+    initialEvent ?? { status: "DRAFT" }
+  );
   const sections = useMemo(() => {
-    let list = showBudget ? ALL_SECTIONS : ALL_SECTIONS.filter((s) => s.key !== "s5");
-    if (editMode && editableKeys !== "all") {
-      list = list.filter((s) => editableKeys.includes(s.key));
-    }
+    let list =
+      editableKeys === "all"
+        ? ALL_SECTIONS
+        : ALL_SECTIONS.filter((s) => editableKeys.includes(s.key));
+    // Extra defensive: strip s5 for anyone without budget.view even if the
+    // status-aware filter above would let it through.
+    if (!showBudget) list = list.filter((s) => s.key !== "s5");
     return list;
-  }, [showBudget, editMode, editableKeys]);
+  }, [showBudget, editableKeys]);
 
   const [active, setActive] = useState(sections[0].key);
   const [saving, setSaving] = useState(false);
@@ -245,8 +256,10 @@ export function EventForm({
         </div>
       </div>
 
-      {/* Restricted-access banner for MANAGER / FINANCIAL_ADMIN */}
-      {editMode && editableKeys !== "all" && editableKeys.length > 0 && (
+      {/* Restricted-access banner — any role narrower than SUPER_ADMIN.
+          Fires on the "new event" flow too so Sales/CCM users know why their
+          Staff / Financial sections are missing from the nav. */}
+      {editableKeys !== "all" && editableKeys.length > 0 && (
         <div className="rounded-lg border border-signal-400/30 bg-signal-400/5 p-3 mb-4 text-xs flex items-start gap-2">
           <span className="rounded bg-signal-400/15 text-signal-400 px-1.5 py-0.5 font-mono uppercase tracking-wider text-[0.65rem] shrink-0 mt-0.5">
             Restricted
