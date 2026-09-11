@@ -31,11 +31,15 @@ import {
   slotHours,
 } from "@/lib/roster-calc";
 import { formatBND, makeId } from "@/lib/utils";
+import { canViewStaffBudgetTile } from "@/lib/permissions";
+import { useSessionStore } from "@/stores/session-store";
 import type { EventConceptForm } from "@/lib/validation/event-schema";
 import type { BroadcastDay, RosterSlot, StaffLine, User } from "@/lib/types";
 
 export function Section4() {
   const { control } = useFormContext<EventConceptForm>();
+  const currentUser = useSessionStore((s) => s.user);
+  const showStaffBudget = canViewStaffBudgetTile(currentUser);
   const staff = useWatch({ control, name: "s5.staff" }) ?? [];
   const schedule = (useWatch({ control, name: "s8.schedule" }) ?? []) as BroadcastDay[];
   const totals = calculateStaffing(staff as StaffLine[]);
@@ -54,39 +58,53 @@ export function Section4() {
       description="Roster internal + external crew. Overtime and meal allowance are calculated automatically from each shift."
       owner="manager"
     >
-      {/* Estimated staffing budget */}
-      <div className="rounded-lg border-2 border-accent/30 bg-accent/5 p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Calculator className="h-4 w-4 text-accent" />
-            <div className="callsign">Estimated staffing budget</div>
+      {/* Estimated staffing budget — money figures. Gated to Finance Lead,
+          Financial Admin, and Super Admin only. Hidden from Managers so they
+          fill in roster / shifts without seeing the money impact of each
+          person they add. */}
+      {showStaffBudget ? (
+        <div className="rounded-lg border-2 border-accent/30 bg-accent/5 p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Calculator className="h-4 w-4 text-accent" />
+              <div className="callsign">Estimated staffing budget</div>
+            </div>
+            <div className="text-[0.7rem] font-mono text-muted-foreground">
+              {totals.slotCount} shifts · {totals.totalHours.toFixed(1)}h total
+            </div>
           </div>
-          <div className="text-[0.7rem] font-mono text-muted-foreground">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <BudgetTile label="Base pay" value={formatBND(totals.baseBND)} />
+            <BudgetTile
+              label="Overtime"
+              value={formatBND(totals.overtimeBND)}
+              hint={`>${STANDARD_SHIFT_HOURS}h × ${OVERTIME_RATE_MULTIPLIER}`}
+            />
+            <BudgetTile
+              label="Meal allowance"
+              value={formatBND(totals.mealAllowanceBND)}
+              hint={`≥${MEAL_MIN_WORK_HOURS}h shifts`}
+            />
+            <BudgetTile label="Total" value={formatBND(totals.totalBND)} emphasis />
+          </div>
+          <p className="text-xs text-muted-foreground pt-1">
+            Formula: <span className="font-mono">count × rate/hr × hours</span>{" "}
+            + OT (×{OVERTIME_RATE_MULTIPLIER} beyond {STANDARD_SHIFT_HOURS}h) + meal
+            allowance ({formatBND(MEAL_ALLOWANCE_LUNCH_BND)} lunch,{" "}
+            {formatBND(MEAL_ALLOWANCE_DINNER_BND)} dinner) — weekday dinner only
+            from 17:15, weekend both possible.
+          </p>
+        </div>
+      ) : (
+        // Non-money placeholder — Managers still see the shift/hour counter
+        // so they can gauge coverage without seeing the dollar impact.
+        <div className="rounded-lg border bg-muted/30 p-4 text-xs text-muted-foreground flex items-center justify-between">
+          <span className="callsign">Roster coverage</span>
+          <span className="font-mono">
             {totals.slotCount} shifts · {totals.totalHours.toFixed(1)}h total
-          </div>
+          </span>
         </div>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <BudgetTile label="Base pay" value={formatBND(totals.baseBND)} />
-          <BudgetTile
-            label="Overtime"
-            value={formatBND(totals.overtimeBND)}
-            hint={`>${STANDARD_SHIFT_HOURS}h × ${OVERTIME_RATE_MULTIPLIER}`}
-          />
-          <BudgetTile
-            label="Meal allowance"
-            value={formatBND(totals.mealAllowanceBND)}
-            hint={`≥${MEAL_MIN_WORK_HOURS}h shifts`}
-          />
-          <BudgetTile label="Total" value={formatBND(totals.totalBND)} emphasis />
-        </div>
-        <p className="text-xs text-muted-foreground pt-1">
-          Formula: <span className="font-mono">count × rate/hr × hours</span>{" "}
-          + OT (×{OVERTIME_RATE_MULTIPLIER} beyond {STANDARD_SHIFT_HOURS}h) + meal
-          allowance ({formatBND(MEAL_ALLOWANCE_LUNCH_BND)} lunch,{" "}
-          {formatBND(MEAL_ALLOWANCE_DINNER_BND)} dinner) — weekday dinner only
-          from 17:15, weekend both possible.
-        </p>
-      </div>
+      )}
 
       {/* Broadcast dependency banner */}
       {!broadcastReady && (
@@ -239,6 +257,7 @@ export function Section4() {
                 onRemove={remove}
                 rosterEnabled={broadcastReady}
                 availableDates={availableDates}
+                showMoney={showStaffBudget}
               />
               <StaffGroup
                 title="External / freelance"
@@ -248,6 +267,7 @@ export function Section4() {
                 onRemove={remove}
                 rosterEnabled={broadcastReady}
                 availableDates={availableDates}
+                showMoney={showStaffBudget}
               />
             </div>
           );
@@ -287,6 +307,7 @@ function StaffGroup({
   onRemove,
   rosterEnabled,
   availableDates,
+  showMoney,
 }: {
   title: string;
   rows: { l: StaffLine; i: number }[];
@@ -295,6 +316,9 @@ function StaffGroup({
   onRemove: (i: number) => void;
   rosterEnabled: boolean;
   availableDates: string[];
+  /** Whether the current viewer is allowed to see per-row Base/OT/Meal $
+   *  breakdown. Threaded down from Section4 → StaffGroup → StaffRow. */
+  showMoney: boolean;
 }) {
   return (
     <div className="space-y-2">
@@ -308,6 +332,7 @@ function StaffGroup({
             onRemove={() => onRemove(i)}
             rosterEnabled={rosterEnabled}
             availableDates={availableDates}
+            showMoney={showMoney}
           />
         ))}
         {rows.length === 0 && (
@@ -329,12 +354,14 @@ function StaffRow({
   onRemove,
   rosterEnabled,
   availableDates,
+  showMoney,
 }: {
   line: StaffLine;
   onUpdate: (patch: Partial<StaffLine>) => void;
   onRemove: () => void;
   rosterEnabled: boolean;
   availableDates: string[];
+  showMoney: boolean;
 }) {
   const [rosterOpen, setRosterOpen] = useState(false);
   const slots = line.rosterSlots ?? [];
@@ -437,7 +464,7 @@ function StaffRow({
           Roster ({slots.length} {slots.length === 1 ? "shift" : "shifts"})
           {!rosterEnabled && <Lock className="h-3 w-3 ml-1" />}
         </button>
-        {rowTotal > 0 && (
+        {showMoney && rowTotal > 0 && (
           <div className="ml-auto flex items-center gap-3 text-xs font-mono text-muted-foreground">
             <span title="Base pay">{formatBND(rowCost.base)}</span>
             <span title="Overtime">+ OT {formatBND(rowCost.ot)}</span>

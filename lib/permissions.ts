@@ -151,6 +151,18 @@ export function canViewBudget(user: User | null | undefined): boolean {
 }
 
 /**
+ * Narrower than canViewBudget — gates the "Estimated staffing budget" tile
+ * at the top of the Staff section (Base Pay / OT / Meal Allowance / Total).
+ * Restricted so Managers filling in roster don't see the money impact of
+ * each shift they add. Only the money-owning roles + Super Admin see it.
+ */
+export function canViewStaffBudgetTile(user: User | null | undefined): boolean {
+  if (!user || user.status === "disabled") return false;
+  if (isSuperAdmin(user)) return true;
+  return hasAnyRole(user, ["FINANCE_LEAD", "FINANCIAL_ADMIN"]);
+}
+
+/**
  * Sign-off authorization — Nabeng (1st), Rudy (2nd), Jenny (Final) only.
  * Super Admins are explicitly EXCLUDED — sign-off is reserved for the three
  * designated approvers.
