@@ -163,6 +163,42 @@ export function canViewStaffBudgetTile(user: User | null | undefined): boolean {
 }
 
 /**
+ * Maps User.department → the corresponding DEPT_ROSTER key in
+ * lib/constants.ts. Returns null when the department has no roster card
+ * (currently: "General Manager" and "Unassigned") — callers treat null as
+ * "no scoping applies" and fall back to showing every card.
+ */
+export function rosterDeptKeyForDepartment(department: string | undefined): string | null {
+  switch (department) {
+    case "Sales":            return "SALES";
+    case "Finance":          return "FINANCE";
+    case "Technical":        return "TECH";
+    case "IT":               return "IT";
+    case "CCM":              return "CCM";
+    case "HR":               return "HR";
+    default:                 return null;   // General Manager, Unassigned, etc.
+  }
+}
+
+/**
+ * Which DEPT_ROSTER card keys should be visible to `user` when they tick
+ * roster members. Rules:
+ *   - Super Admin sees every card.
+ *   - A user whose department maps to a roster card sees their own card +
+ *     the DJ card (DJs are a shared pool with no departmental owner).
+ *   - A user whose department doesn't map (General Manager, Unassigned)
+ *     falls back to seeing every card — so a GM doesn't get locked out.
+ * Return "all" as a sentinel to save the caller from building the full list.
+ */
+export function visibleRosterDeptKeys(user: User | null | undefined): string[] | "all" {
+  if (!user || user.status === "disabled") return [];
+  if (isSuperAdmin(user)) return "all";
+  const own = rosterDeptKeyForDepartment(user.department);
+  if (!own) return "all"; // fallback for GM/Unassigned per the spec
+  return [own, "DJ"];
+}
+
+/**
  * Sign-off authorization — Nabeng (1st), Rudy (2nd), Jenny (Final) only.
  * Super Admins are explicitly EXCLUDED — sign-off is reserved for the three
  * designated approvers.

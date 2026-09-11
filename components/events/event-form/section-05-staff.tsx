@@ -31,7 +31,7 @@ import {
   slotHours,
 } from "@/lib/roster-calc";
 import { formatBND, makeId } from "@/lib/utils";
-import { canViewStaffBudgetTile } from "@/lib/permissions";
+import { canViewStaffBudgetTile, visibleRosterDeptKeys } from "@/lib/permissions";
 import { useSessionStore } from "@/stores/session-store";
 import type { EventConceptForm } from "@/lib/validation/event-schema";
 import type { BroadcastDay, RosterSlot, StaffLine, User } from "@/lib/types";
@@ -40,6 +40,18 @@ export function Section4() {
   const { control } = useFormContext<EventConceptForm>();
   const currentUser = useSessionStore((s) => s.user);
   const showStaffBudget = canViewStaffBudgetTile(currentUser);
+  // Which DEPT_ROSTER cards this user is allowed to see. Everyone (except
+  // Super Admins and users without a mapped department) sees only their own
+  // department card + the shared DJ card — an IT Manager can't tick Sales
+  // people onto the roster, and vice versa. "all" = show everything.
+  const allowedDeptKeys = visibleRosterDeptKeys(currentUser);
+  const visibleDeptRoster = useMemo(
+    () =>
+      allowedDeptKeys === "all"
+        ? DEPT_ROSTER
+        : DEPT_ROSTER.filter((d) => allowedDeptKeys.includes(d.key)),
+    [allowedDeptKeys]
+  );
   const staff = useWatch({ control, name: "s5.staff" }) ?? [];
   const schedule = (useWatch({ control, name: "s8.schedule" }) ?? []) as BroadcastDay[];
   const totals = calculateStaffing(staff as StaffLine[]);
@@ -194,42 +206,60 @@ export function Section4() {
 
           return (
             <div className="space-y-6">
-              {/* Interactive department directory — tick a name to add them to the roster */}
+              {/* Interactive department directory — tick a name to add them to the roster.
+                  Scoped to the current user's department: an IT Manager sees only
+                  the IT card (plus the shared DJ pool). Super Admin and users
+                  without a mapped department see everything. */}
               <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
-                <div>
-                  <div className="callsign">Department directory</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Tick a name to add them to this event's roster. Untick to remove.
-                  </p>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {DEPT_ROSTER.map((d) => (
-                    <div key={d.key} className="rounded-md border bg-card p-3 space-y-2">
-                      <div className="text-xs font-mono font-semibold tracking-wider text-accent">
-                        {d.label}
-                      </div>
-                      <div className="space-y-1">
-                        {d.members.map((m) => {
-                          const on = selectedNames.has(m);
-                          return (
-                            <label
-                              key={`${d.key}:${m}`}
-                              className={`flex items-center gap-2 rounded-sm px-1.5 py-1 text-sm cursor-pointer transition-colors ${
-                                on ? "bg-accent/10" : "hover:bg-secondary/60"
-                              }`}
-                            >
-                              <Checkbox
-                                checked={on}
-                                onCheckedChange={(v) => toggleDeptMember(m, Boolean(v), d.key)}
-                              />
-                              <span>{m}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="callsign">Department directory</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Tick a name to add them to this event's roster. Untick to remove.
+                    </p>
+                  </div>
+                  {allowedDeptKeys !== "all" && (
+                    <div className="rounded bg-signal-500/10 text-signal-500 px-2 py-0.5 text-[0.65rem] font-mono uppercase tracking-wider shrink-0">
+                      Scoped to your department
                     </div>
-                  ))}
+                  )}
                 </div>
+                {visibleDeptRoster.length === 0 ? (
+                  <div className="rounded-md border border-dashed p-4 text-xs text-muted-foreground text-center">
+                    Your department has no roster card configured. Ask a Super
+                    Admin to add one, or roster people manually using "Add role"
+                    below.
+                  </div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {visibleDeptRoster.map((d) => (
+                      <div key={d.key} className="rounded-md border bg-card p-3 space-y-2">
+                        <div className="text-xs font-mono font-semibold tracking-wider text-accent">
+                          {d.label}
+                        </div>
+                        <div className="space-y-1">
+                          {d.members.map((m) => {
+                            const on = selectedNames.has(m);
+                            return (
+                              <label
+                                key={`${d.key}:${m}`}
+                                className={`flex items-center gap-2 rounded-sm px-1.5 py-1 text-sm cursor-pointer transition-colors ${
+                                  on ? "bg-accent/10" : "hover:bg-secondary/60"
+                                }`}
+                              >
+                                <Checkbox
+                                  checked={on}
+                                  onCheckedChange={(v) => toggleDeptMember(m, Boolean(v), d.key)}
+                                />
+                                <span>{m}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {selectedNames.size > 0 && (
                   <div className="pt-1 text-[0.7rem] text-muted-foreground">
                     {selectedNames.size} {selectedNames.size === 1 ? "person" : "people"} added to roster below.
