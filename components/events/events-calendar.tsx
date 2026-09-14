@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, MapPin, X } from "lucide-react";
+import { ArrowRight, CalendarDays, MapPin, X } from "lucide-react";
 import FullCalendar from "@fullcalendar/react";
 import type { EventContentArg } from "@fullcalendar/core";
 import dayGridPlugin from "@fullcalendar/daygrid";
@@ -10,6 +10,12 @@ import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { CATEGORY_COLOR, CATEGORY_COLOR_UNSET, DEFAULT_CATEGORIES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -85,6 +91,26 @@ export function EventsCalendar({ events }: { events: CalendarItem[] }) {
   // O(1) lookup for hover popover data by event id — FullCalendar passes us
   // its own EventApi which doesn't carry our custom fields.
   const byId = useMemo(() => new Map(events.map((e) => [e.id, e])), [events]);
+
+  // Day-click modal state: FullCalendar gives us a YYYY-MM-DD string in
+  // dateStr when a day cell is clicked. We show a Dialog listing every
+  // event whose date range overlaps that day, with full summaries.
+  const [dayModalDate, setDayModalDate] = useState<string | null>(null);
+  const eventsOnDay = useMemo(() => {
+    if (!dayModalDate) return [];
+    // Local Y-M-D bounds — a naive midnight-to-midnight window for the
+    // clicked day. Overlaps rather than exact-match: multi-day events
+    // spanning the day are included.
+    const dayStart = new Date(`${dayModalDate}T00:00:00`);
+    const dayEnd = new Date(`${dayModalDate}T23:59:59.999`);
+    return filtered
+      .filter((e) => {
+        const start = new Date(e.start);
+        const end = e.end ? new Date(e.end) : start;
+        return start <= dayEnd && end >= dayStart;
+      })
+      .sort((a, b) => +new Date(a.start) - +new Date(b.start));
+  }, [dayModalDate, filtered]);
 
   return (
     <Card className="p-2 sm:p-4 overflow-hidden">
@@ -170,6 +196,11 @@ export function EventsCalendar({ events }: { events: CalendarItem[] }) {
                 item={byId.get(arg.event.id) ?? null}
               />
             )}
+            // Click any day cell (empty or full) → modal listing every
+            // event on that day. Complements the hover popover (which shows
+            // one event on hover); this is the "give me the whole day at
+            // a glance" shortcut.
+            dateClick={(arg) => setDayModalDate(arg.dateStr)}
             height="auto"
             firstDay={1}
             eventDisplay="block"
@@ -202,6 +233,76 @@ export function EventsCalendar({ events }: { events: CalendarItem[] }) {
           <span className="text-muted-foreground">unset</span>
         </span>
       </div>
+
+      {/* Day-click modal — full list of events on the clicked day. */}
+      <Dialog open={!!dayModalDate} onOpenChange={(v) => !v && setDayModalDate(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarDays className="h-4 w-4 text-accent" />
+              {dayModalDate &&
+                new Date(dayModalDate + "T00:00:00").toLocaleDateString("en-GB", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                  year: "numeric",
+                })}
+            </DialogTitle>
+          </DialogHeader>
+          {eventsOnDay.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+              No events scheduled on this day.
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto -mr-2 pr-2">
+              {eventsOnDay.map((e) => {
+                const color = colorFor(e.category);
+                return (
+                  <div
+                    key={e.id}
+                    className="rounded-lg border p-3 space-y-2"
+                    style={{ borderLeftColor: color, borderLeftWidth: 4 }}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold break-words">{e.title}</div>
+                        <div className="text-[0.7rem] font-mono text-muted-foreground mt-0.5">
+                          {formatDateRange(e.start, e.end)}
+                        </div>
+                      </div>
+                      {e.category && (
+                        <span
+                          className="shrink-0 rounded-full px-2 py-0.5 text-[0.65rem] font-medium"
+                          style={{ backgroundColor: color, color: readableTextColor(color) }}
+                        >
+                          {e.category}
+                        </span>
+                      )}
+                    </div>
+                    {e.venue && (
+                      <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                        <MapPin className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        <span className="min-w-0 break-words">{e.venue}</span>
+                      </div>
+                    )}
+                    {e.description && (
+                      <p className="text-xs text-foreground/80 leading-relaxed">
+                        {summarize(e.description, 240)}
+                      </p>
+                    )}
+                    <Button asChild size="sm" variant="outline" className="w-full gap-1.5">
+                      <Link href={`/events/${e.id}`}>
+                        Open event
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
