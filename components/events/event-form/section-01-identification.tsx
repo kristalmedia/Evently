@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SectionShell, Field, FieldRow } from "./section-shell";
 import { CommercialClientFields } from "./commercial-client-fields";
+import { EventFormProgramFlowSection } from "./program-flow-builder";
 import type { EventConceptForm } from "@/lib/validation/event-schema";
 import { DEFAULT_CATEGORIES, EVENT_TYPES, VOG_PILLARS } from "@/lib/constants";
 import type { EventType, VoiceOfGoodPillar } from "@/lib/types";
@@ -186,6 +187,11 @@ export function Section1() {
           <Input type="date" {...register("s1.conceptDate")} />
         </Field>
       </FieldRow>
+
+      {/* Program flow / run-of-show — timed steps. Editors always see the
+          builder; downstream viewers only see the published flow once the
+          event has been approved (see isProgramFlowVisibleToViewers). */}
+      <EventFormProgramFlowSection />
 
       {/* Merchandise sales — toggle first, fields expand when on. */}
       <div className="rounded-lg border p-4 space-y-3">

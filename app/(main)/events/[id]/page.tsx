@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, MapPin, Users, CalendarClock, DollarSign, Radio } from "lucide-react";
+import { ArrowLeft, Clock, MapPin, Users, CalendarClock, DollarSign, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
@@ -8,6 +8,10 @@ import { ExportPDFButton } from "@/components/events/export-pdf-button";
 import { EditEventLink } from "@/components/events/edit-event-link";
 import { BroadcastRosterTable } from "@/components/events/broadcast-roster-table";
 import { WorkflowStageActions, WorkflowStageWaiting } from "@/components/events/workflow-stage-actions";
+import {
+  ProgramFlowView,
+  isProgramFlowVisibleToViewers,
+} from "@/components/events/event-form/program-flow-builder";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { PriorityBadge } from "@/components/shared/priority-badge";
 import { OnAirPill, Callsign } from "@/components/shared/broadcast-marks";
@@ -280,6 +284,25 @@ export default async function EventDetailPage({
           </CardContent>
         </Card>
       </div>
+
+      {/* Program flow / run-of-show — visible to all users once the event
+          is approved (spec: hidden until officially approved, then all
+          users gain read access). Editors also see it on the edit form
+          during DRAFT so they can author it. */}
+      {(event.s1.programFlow?.length ?? 0) > 0 &&
+        (isProgramFlowVisibleToViewers(event.status) || canEditEvent(user)) && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-accent" />
+                Program flow
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ProgramFlowView steps={event.s1.programFlow} />
+            </CardContent>
+          </Card>
+        )}
 
       {/* Timeline progress */}
       {event.s7.tasks.length > 0 && (

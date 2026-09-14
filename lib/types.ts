@@ -147,6 +147,22 @@ export type EventType =
   | "SCHOOL_INSTITUTION"
   | "OTHER";
 
+// ─── Program flow ─────────────────────────────────────────────────────────
+/**
+ * One entry in the event's run-of-show. A flat list of timed rows sorted
+ * by their time field client-side — no explicit ordering column, so
+ * inserting a step at 14:30 into a 14:00 → 15:00 stretch just works.
+ */
+export interface ProgramFlowStep {
+  id: string;
+  /** HH:mm, 24-hour. */
+  time: string;
+  activity: string;
+  /** Person or role responsible for this step (Emcee, DJ, Technical Lead, etc.). */
+  owner: string;
+  notes?: string;
+}
+
 // ─── Section 1: Identification ─────────────────────────────────────────────
 export interface Section1_Identification {
   eventName: string;
@@ -163,6 +179,14 @@ export interface Section1_Identification {
   conceptPreparedBy: string;
   conceptDate: string;
   targetSubmissionDate?: string;
+  /**
+   * Program flow / run-of-show for the event — a timed list of activities
+   * with owners. Optional (not every event needs one) and empty by default.
+   * See the "hidden until approval" gating in section-01-identification.tsx
+   * for the visibility rule that surfaces this to all users only once the
+   * event reaches an approved status.
+   */
+  programFlow?: ProgramFlowStep[];
 }
 
 // ─── Section 2: Nature ─────────────────────────────────────────────────────

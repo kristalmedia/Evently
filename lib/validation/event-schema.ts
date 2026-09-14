@@ -2,6 +2,14 @@ import { z } from "zod";
 
 const emptyToUndef = (v: unknown) => (v === "" ? undefined : v);
 
+export const programFlowStepSchema = z.object({
+  id: z.string().min(1),
+  time: z.string().regex(/^\d{1,2}:\d{2}$/, "HH:mm"),
+  activity: z.string().min(1),
+  owner: z.string().min(1),
+  notes: z.string().optional(),
+});
+
 // ─── Section 1 ────────────────────────────────────────────────────────────
 export const section1Schema = z.object({
   eventName: z.string().min(2, "Give the event a name."),
@@ -18,6 +26,7 @@ export const section1Schema = z.object({
   conceptPreparedBy: z.string().min(2, "Preparer name required."),
   conceptDate: z.string().min(1, "Event date required."),
   targetSubmissionDate: z.string().optional(),
+  programFlow: z.array(programFlowStepSchema).optional(),
 });
 
 // ─── Section 2 ────────────────────────────────────────────────────────────
