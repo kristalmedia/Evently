@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { SectionShell, Field, FieldRow } from "./section-shell";
+import { CommercialClientFields } from "./commercial-client-fields";
 import type { EventConceptForm } from "@/lib/validation/event-schema";
 import { DEFAULT_CATEGORIES, EVENT_TYPES, VOG_PILLARS } from "@/lib/constants";
 import type { EventType, VoiceOfGoodPillar } from "@/lib/types";
@@ -99,6 +100,11 @@ export function Section1() {
           )}
         />
       </div>
+
+      {/* Commercial-only client details block, with a combobox that
+          searches the Sales team's Google Sheet clients list. Rendered
+          only when the classification above is COMMERCIAL. */}
+      {classification === "COMMERCIAL" && <CommercialClientFields />}
 
       {classification === "COMMUNITY_CSR" && (
         <Controller

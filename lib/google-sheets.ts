@@ -174,3 +174,35 @@ export async function getKotgBookingsWithClients(opts?: {
   cacheHolder.__kristal_kotg_cache = { data: joined, fetchedAt: Date.now() };
   return joined;
 }
+
+// ─── Lightweight clients-only fetch (for the event-form autofill combobox) ─
+interface ClientsCache {
+  data: SheetClient[];
+  fetchedAt: number;
+}
+const clientsCacheHolder = globalThis as unknown as {
+  __kristal_clients_cache?: ClientsCache;
+};
+
+/**
+ * All rows from the Clients sheet, unfiltered. Used by the event-form's
+ * commercial-client combobox (Section 1, when classification=COMMERCIAL)
+ * so Sales users can pick from the Sales team's canonical client list
+ * instead of retyping names.
+ *
+ * Separate cache from getKotgBookingsWithClients() so a clients-only
+ * refresh (typing in the combobox) doesn't invalidate the KOTG bookings
+ * page's cache and vice-versa.
+ */
+export async function getAllSheetClients(opts?: {
+  forceRefresh?: boolean;
+}): Promise<SheetClient[]> {
+  const cached = clientsCacheHolder.__kristal_clients_cache;
+  if (!opts?.forceRefresh && cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    return cached.data;
+  }
+  const rows = await fetchRange(RANGE_CLIENTS);
+  const clients = parseSheetRows<SheetClient>(rows);
+  clientsCacheHolder.__kristal_clients_cache = { data: clients, fetchedAt: Date.now() };
+  return clients;
+}
