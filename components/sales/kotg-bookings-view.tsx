@@ -165,14 +165,41 @@ export function KotgBookingsView({
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filtered.map(({ booking, client }) => (
+                    filtered.map(({ booking, client, customPackage }) => (
                       <TableRow key={booking.BookingID}>
                         <TableCell>
-                          <div className="font-medium">{booking.ServiceName || "—"}</div>
+                          <div className="font-medium">
+                            {/* Prefer the CustomPackage name over the (usually
+                                empty) ServiceName when the booking uses a
+                                custom package. Falls back to ServiceName then
+                                em-dash. */}
+                            {customPackage?.PackageName || booking.ServiceName || "—"}
+                          </div>
                           <div className="text-xs font-mono text-muted-foreground">
                             {booking.BookingID}
                             {booking.QuotationNumber && ` · ${booking.QuotationNumber}`}
                           </div>
+                          {customPackage && (
+                            <div className="mt-1 flex flex-wrap items-center gap-1">
+                              <span className="rounded bg-signal-500/10 text-signal-500 px-1.5 py-0.5 text-[0.6rem] font-mono uppercase tracking-wider">
+                                Custom package
+                              </span>
+                              <span className="text-[0.68rem] text-muted-foreground">
+                                Final: {customPackage.FinalPrice || customPackage.ComputedTotal || "—"}
+                              </span>
+                            </div>
+                          )}
+                          {/* Data-quality signal — same rule as the Client
+                              column's unmatched badge but for packages. */}
+                          {booking.CustomPackageID && !customPackage && (
+                            <div
+                              className="mt-1 inline-flex items-center gap-1 text-[0.68rem] text-amber-600 dark:text-amber-400"
+                              title={`CustomPackageID "${booking.CustomPackageID}" not found in CustomPackages sheet`}
+                            >
+                              <AlertTriangle className="h-3 w-3" />
+                              Unmatched package
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell>
                           {client ? (

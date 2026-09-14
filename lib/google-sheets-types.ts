@@ -53,11 +53,31 @@ export interface SheetClient {
   ContactsJSON: string;
 }
 
-/** A KOTG service booking joined with its Clients-sheet record. */
+export interface SheetCustomPackage {
+  CustomPackageID: string;
+  PackageName: string;
+  ComponentsJSON: string;
+  ComputedTotal: string;
+  OverridePrice: string;
+  FinalPrice: string;
+  Notes: string;
+  Status: string;
+  CreatedBy: string;
+  CreatedAt: string;
+  UpdatedAt: string;
+}
+
+/** A KOTG service booking joined with its Clients-sheet record and,
+ *  when the booking references one, its CustomPackages-sheet record. */
 export interface KotgBookingWithClient {
   booking: SheetServiceBooking;
   /** Null when the booking's ClientID doesn't match any row in Clients —
    *  surfaced rather than silently dropped, since that's a data-quality
    *  issue worth showing, not hiding. */
   client: SheetClient | null;
+  /** Only populated when the booking has a non-empty CustomPackageID.
+   *  Null both when the booking uses a standard service (no CustomPackageID
+   *  at all — the common case) AND when the ID is set but doesn't match
+   *  any row in CustomPackages (data-quality signal, same rule as client). */
+  customPackage: SheetCustomPackage | null;
 }

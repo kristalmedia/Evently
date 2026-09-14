@@ -1,5 +1,10 @@
 import { JWT } from "google-auth-library";
-import type { KotgBookingWithClient, SheetClient, SheetServiceBooking } from "./google-sheets-types";
+import type {
+  KotgBookingWithClient,
+  SheetClient,
+  SheetCustomPackage,
+  SheetServiceBooking,
+} from "./google-sheets-types";
 
 /**
  * Read-only live sync from the Sales team's external Google Sheet
@@ -20,6 +25,7 @@ const SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"];
 // maintained sales sheet, cheap to over-request on a values.get call.
 const RANGE_SERVICE_BOOKINGS = "ServiceBookings!A1:V10000";
 const RANGE_CLIENTS = "Clients!A1:M10000";
+const RANGE_CUSTOM_PACKAGES = "CustomPackages!A1:K10000";
 
 /**
  * JWT client anchored to globalThis — same HMR-survival pattern as
@@ -139,14 +145,17 @@ export async function getKotgBookingsWithClients(opts?: {
     return cached.data;
   }
 
-  const [bookingRows, clientRows] = await Promise.all([
+  const [bookingRows, clientRows, packageRows] = await Promise.all([
     fetchRange(RANGE_SERVICE_BOOKINGS),
     fetchRange(RANGE_CLIENTS),
+    fetchRange(RANGE_CUSTOM_PACKAGES),
   ]);
 
   const bookings = parseSheetRows<SheetServiceBooking>(bookingRows);
   const clients = parseSheetRows<SheetClient>(clientRows);
+  const packages = parseSheetRows<SheetCustomPackage>(packageRows);
   const clientsById = new Map(clients.map((c) => [c.ClientID, c]));
+  const packagesById = new Map(packages.map((p) => [p.CustomPackageID, p]));
 
   const kotgBookings = bookings.filter(
     (b) => b.Category.trim().toLowerCase() === KOTG_CATEGORY
@@ -155,6 +164,11 @@ export async function getKotgBookingsWithClients(opts?: {
   const joined: KotgBookingWithClient[] = kotgBookings.map((booking) => ({
     booking,
     client: clientsById.get(booking.ClientID) ?? null,
+    // CustomPackageID is empty on most bookings (they use a standard
+    // ServiceID instead). Only look up + surface the package when set.
+    customPackage: booking.CustomPackageID
+      ? packagesById.get(booking.CustomPackageID) ?? null
+      : null,
   }));
 
   cacheHolder.__kristal_kotg_cache = { data: joined, fetchedAt: Date.now() };
