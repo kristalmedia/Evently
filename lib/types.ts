@@ -57,6 +57,14 @@ export interface User {
    * who also acts as Sales Admin gets both surfaces.
    */
   secondaryRole?: Role;
+  /**
+   * ISO timestamp of when the user last acknowledged the onboarding
+   * tutorial (either by dismissing it or by ticking "Don't show again").
+   * Unset means they haven't seen it — the modal fires on next login.
+   * Persisted server-side via the /api/users/me/onboarding endpoint so
+   * the flag survives sign-outs and browser changes.
+   */
+  onboardingSeenAt?: string;
   status: "active" | "disabled";
   /** Onboarding pipeline — INVITED until they set a password via /auth/set-password */
   verificationStatus: VerificationStatus;
