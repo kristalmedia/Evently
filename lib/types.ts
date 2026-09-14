@@ -184,9 +184,20 @@ export interface Section3_Concept {
 // ─── Section 4: Resources ──────────────────────────────────────────────────
 export interface EquipmentLine {
   name: string;
-  qty: number;
+  /**
+   * How many units of this item are needed. Aligned with the form field
+   * name (was `qty` — the form component has always used `quantity`, they
+   * diverged silently for a while).
+   */
+  quantity: number;
   notes?: string;
   category: "OWNED" | "HIRED";
+  /**
+   * Whether the item is essential for the event to go ahead — the checkbox
+   * next to the item's row. Kept optional so seed data / older records
+   * without the field still validate as EquipmentLine.
+   */
+  required?: boolean;
 }
 export interface Section4_Resources {
   equipment: EquipmentLine[];

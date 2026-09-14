@@ -43,7 +43,18 @@ export default async function EditEventPage({
           s2: event.s2,
           s3: event.s3,
           s4: event.s4,
-          s5: event.s5,
+          // The zod-inferred form type expects rosterSlots to always be an
+          // array (it has a .default([]) in the schema); the domain type in
+          // lib/types.ts still marks it optional. Normalize here at the
+          // boundary so the form receives what it expects — cheaper than
+          // widening every caller of the domain type.
+          s5: {
+            ...event.s5,
+            staff: event.s5.staff.map((s) => ({
+              ...s,
+              rosterSlots: s.rosterSlots ?? [],
+            })),
+          },
           s6: event.s6,
           s7: event.s7,
           s8: event.s8,

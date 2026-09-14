@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { SectionShell, Field } from "./section-shell";
 import { HIRED_EQUIPMENT_TEMPLATE, OWNED_EQUIPMENT_TEMPLATE } from "@/lib/constants";
-import type { EquipmentItem } from "@/lib/types";
+import type { EquipmentLine as EquipmentItem } from "@/lib/types";
 import type { EventConceptForm } from "@/lib/validation/event-schema";
 
 export function Section2() {

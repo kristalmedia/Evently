@@ -53,9 +53,13 @@ export const section3Schema = z.object({
 // ─── Section 4 ────────────────────────────────────────────────────────────
 export const equipmentLineSchema = z.object({
   name: z.string().min(1),
-  qty: z.coerce.number().int().min(0).default(0),
+  // Field name matches EquipmentLine.quantity (the form component was
+  // already using `quantity` — the schema previously called it `qty`,
+  // which silently dropped the value on save).
+  quantity: z.coerce.number().int().min(0).default(0),
   notes: z.string().optional(),
   category: z.enum(["OWNED", "HIRED"]),
+  required: z.boolean().optional(),
 });
 export const section4Schema = z.object({
   equipment: z.array(equipmentLineSchema).default([]),

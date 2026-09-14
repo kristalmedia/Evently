@@ -199,7 +199,17 @@ export function Section8() {
 
           function setFor(role: ApproverRole, patch: Partial<SignOffEntry>) {
             const existing = byRole.get(role);
-            const next: SignOffEntry = { role, ...existing, ...patch };
+            // Domain SignOffEntry.name is required, but the zod-inferred
+            // form-side entry allows name?: string | undefined for partial
+            // drafts. Coerce to "" so the assignment satisfies the domain
+            // type — matches what the form validation eventually enforces
+            // anyway when someone actually signs.
+            const next: SignOffEntry = {
+              role,
+              name: existing?.name ?? "",
+              signedAt: existing?.signedAt,
+              ...patch,
+            };
             const others = entries.filter((e) => e.role !== role);
             field.onChange([...others, next]);
           }

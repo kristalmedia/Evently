@@ -153,6 +153,11 @@ export function Section4() {
               // can add them later — or re-tick the checkbox after saving
               // schedule days.
               const autoSlots: RosterSlot[] = availableDates.map((d) => ({
+                // `id` is required on RosterSlot — was being omitted here,
+                // slipping past runtime because the form store didn't
+                // actually need it for these auto-populated all-day slots,
+                // but TypeScript rightly complained.
+                id: makeId("slot"),
                 date: d,
                 start: "08:00",
                 end: "17:00",
