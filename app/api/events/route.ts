@@ -4,12 +4,14 @@ import { can } from "@/lib/permissions";
 import {
   createEvent,
   getAllEvents,
+  getAllUsers,
   getEventRows,
   getUserByEmail,
   logAudit,
   nextSequentialRefKey,
   pushNotificationTo,
 } from "@/lib/store";
+import { hasRole } from "@/lib/permissions";
 import { announceApprovedEvent } from "@/lib/event-notifications";
 import { APPROVER_EMAILS } from "@/lib/constants";
 import type { EventConcept } from "@/lib/types";
@@ -59,9 +61,11 @@ export async function POST(req: Request) {
   const submitter = session!.user;
 
   // Audit log — DRAFT_SAVED for silent drafts, EVENT_CREATED for anything
-  // that actually enters a live workflow state (approval chain OR the
-  // paid skip-approval path landing directly in STAFFING_IN_PROGRESS).
+  // that actually enters a live workflow state (budget-approval gate,
+  // approval chain, or the paid skip-approval path landing directly in
+  // STAFFING_IN_PROGRESS).
   const isLiveSubmission =
+    created.status === "BUDGET_PENDING" ||
     created.status === "PENDING_APPROVAL" ||
     created.status === "STAFFING_IN_PROGRESS";
   logAudit({
@@ -74,8 +78,24 @@ export async function POST(req: Request) {
 
   // Sequential approval workflow (spec §5) — STRICT ISOLATION.
   // Only the next approver is notified. No cross-firing, no broadcast noise.
-  if (created.status === "PENDING_APPROVAL") {
-    // First Approver (Nabeng) submitted a FREE event — target Rudy only.
+  if (created.status === "BUDGET_PENDING") {
+    // New free-event pre-approval gate — target Putri (Finance Lead)
+    // and anyone else holding the FINANCE_LEAD role. hasRole picks up
+    // secondary-role holders too.
+    const financeLeads = getAllUsers().filter(
+      (u) => u.status === "active" && hasRole(u, "FINANCE_LEAD")
+    );
+    for (const fl of financeLeads) {
+      pushNotificationTo(fl.id, {
+        kind: "APPROVAL_REQUEST",
+        title: `Budget approval requested: ${created.s1.eventName}`,
+        body: `${submitter.fullName} has submitted "${created.s1.eventName}" (${created.s1.eventRefNo}). Please review the budget before it enters the approval chain.`,
+        eventId: created.id,
+      });
+    }
+  } else if (created.status === "PENDING_APPROVAL") {
+    // Kept for backwards compatibility — earlier events + super-admin
+    // overrides that skip the budget gate land here directly.
     const rudy = getUserByEmail(APPROVER_EMAILS.SECOND_APPROVER);
     if (rudy) {
       pushNotificationTo(rudy.id, {

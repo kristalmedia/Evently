@@ -109,6 +109,7 @@ export type Permission =
 
 export type EventStatus =
   | "DRAFT"
+  | "BUDGET_PENDING"          // With Putri (Finance Lead) — pre-approval budget gate
   | "PENDING_APPROVAL"        // With Rudy (2nd approver)
   | "PENDING_FINAL_APPROVAL"  // With Jenny (final approver)
   | "REVISION_REQUIRED"       // Denied by an approver, back to submitter

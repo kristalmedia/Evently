@@ -63,10 +63,13 @@ export default async function EventDetailPage({
         }
       />
 
-      {/* Post-approval workflow: shows an action panel to whoever is on the
-          hook (Manager during STAFFING_IN_PROGRESS, Finance Lead during
-          FINANCIAL_REVIEW), or a read-only status blurb to everyone else. */}
-      {(event.status === "STAFFING_IN_PROGRESS" || event.status === "FINANCIAL_REVIEW") && (
+      {/* Workflow action panel — shows a panel to whoever is on the hook
+          (Finance Lead during BUDGET_PENDING, Manager during
+          STAFFING_IN_PROGRESS, Finance Lead again during FINANCIAL_REVIEW),
+          or a read-only status blurb to everyone else. */}
+      {(event.status === "BUDGET_PENDING" ||
+        event.status === "STAFFING_IN_PROGRESS" ||
+        event.status === "FINANCIAL_REVIEW") && (
         <>
           <WorkflowStageActions eventId={event.id} status={event.status} userRoles={rolesFor(user)} />
           {!hasAnyRole(user, ["MANAGER", "FINANCE_LEAD", "SUPER_ADMIN"]) && (

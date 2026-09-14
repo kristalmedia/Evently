@@ -61,7 +61,10 @@ export function Section8() {
       const values = getValues();
       const payload = {
         ...values,
-        status: "PENDING_APPROVAL",  // routed to Rudy (2nd approver)
+        // New pre-approval gate: free events now route to Putri (Finance
+        // Lead) for a budget-only review FIRST, then Rudy → Jenny after
+        // she approves. See /api/events/[id]/approve-budget.
+        status: "BUDGET_PENDING",
         priority: values.priority ?? "MEDIUM",
         s11: {
           ...(values.s11 ?? { entries: [] }),
@@ -82,7 +85,7 @@ export function Section8() {
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
       const { event } = await res.json();
-      toast.success("Submitted — awaiting Second Approver (Rudy)", {
+      toast.success("Submitted — awaiting Budget Approval (Finance Lead)", {
         position: "bottom-center",
       });
       router.push(`/events/${event.id}`);

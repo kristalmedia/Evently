@@ -199,6 +199,7 @@ export const eventConceptSchema = z.object({
   status: z
     .enum([
       "DRAFT",
+      "BUDGET_PENDING",
       "PENDING_APPROVAL",
       "PENDING_FINAL_APPROVAL",
       "REVISION_REQUIRED",

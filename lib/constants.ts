@@ -32,6 +32,7 @@ export const VOG_PILLARS: { value: VoiceOfGoodPillar; label: string; icon: strin
 
 export const EVENT_STATUSES: { value: EventStatus; label: string; tone: string }[] = [
   { value: "DRAFT", label: "Draft", tone: "muted" },
+  { value: "BUDGET_PENDING", label: "Pending Budget Approval", tone: "amber" },
   { value: "PENDING_APPROVAL", label: "Pending 2nd Approval", tone: "amber" },
   { value: "PENDING_FINAL_APPROVAL", label: "Pending Final Approval", tone: "amber" },
   { value: "REVISION_REQUIRED", label: "Revision Required", tone: "rose" },
