@@ -1,13 +1,14 @@
 "use client";
 
 import { Controller, useFormContext } from "react-hook-form";
-import { Plus, Sparkles, X, Paperclip } from "lucide-react";
+import { Plus, Sparkles, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { SectionShell, Field } from "./section-shell";
+import { AttachmentsPanel } from "./attachments-panel";
 import { HIRED_EQUIPMENT_TEMPLATE, OWNED_EQUIPMENT_TEMPLATE } from "@/lib/constants";
 import type { EquipmentLine as EquipmentItem } from "@/lib/types";
 import type { EventConceptForm } from "@/lib/validation/event-schema";
@@ -103,16 +104,12 @@ export function Section2() {
         <Textarea rows={5} placeholder="Notes…" {...register("s3.brandLink")} />
       </Field>
 
-      {/* Attachments placeholder — real upload flow bolts in here */}
+      {/* Live attachments — drag/drop or click to upload, unlimited count
+          and size. See components/events/event-form/attachments-panel.tsx
+          for the empty-state (new-event flow needs a saved event first). */}
       <div className="space-y-2">
         <Label>General attachments</Label>
-        <div className="rounded-lg border border-dashed p-6 text-center space-y-2">
-          <Paperclip className="h-6 w-6 mx-auto text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            File uploads land here in the production build (Azure Blob / S3).
-            For now, list attachment names in the notes field above.
-          </p>
-        </div>
+        <AttachmentsPanel />
       </div>
     </SectionShell>
   );

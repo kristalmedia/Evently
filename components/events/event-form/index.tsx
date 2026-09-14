@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FormProvider, useForm } from "react-hook-form";
+import { EventFormMetaProvider } from "./event-form-context";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowLeft, ArrowRight, Save } from "lucide-react";
 import { toast } from "sonner";
@@ -219,6 +220,7 @@ export function EventForm({
 
   return (
     <FormProvider {...methods}>
+    <EventFormMetaProvider value={{ eventId: initialEvent?.id ?? null, editMode }}>
       {/* Sticky Save-Draft header — visible on every section */}
       <div className="sticky top-16 z-20 -mx-3 sm:-mx-4 md:-mx-8 mb-6 border-b bg-background/85 backdrop-blur px-3 sm:px-4 md:px-8 py-3">
         <div className="flex items-center justify-between gap-3">
@@ -331,6 +333,7 @@ export function EventForm({
           </div>
         </div>
       </div>
+    </EventFormMetaProvider>
     </FormProvider>
   );
 }
