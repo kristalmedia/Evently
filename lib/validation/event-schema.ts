@@ -32,6 +32,11 @@ export const section2Schema = z
     agreedFeeBND: z.preprocess(emptyToUndef, z.coerce.number().min(0).optional()),
     invoiceRef: z.string().optional(),
     scopeOfServices: z.string().optional(),
+    // Merchandise sales (toggle + inventory)
+    sellMerchandise: z.boolean().optional(),
+    merchandiseQtyToBring: z.preprocess(emptyToUndef, z.coerce.number().int().min(0).optional()),
+    merchandiseQtySoldOut: z.preprocess(emptyToUndef, z.coerce.number().int().min(0).optional()),
+    merchandiseNotes: z.string().optional(),
   })
   .refine(
     (v) =>

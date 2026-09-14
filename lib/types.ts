@@ -169,6 +169,17 @@ export interface Section2_Nature {
   agreedFeeBND?: number;
   invoiceRef?: string;
   scopeOfServices?: string;
+  /**
+   * Merchandise sales tracking — off by default. When true, the inventory
+   * fields below become the source of truth for "how much did we bring vs
+   * how much walked out" post-event. Both counters are non-negative
+   * integers; qtySoldOut > qtyToBring is a valid state (over-sold via
+   * pre-orders or re-orders) and surfaced as a soft warning in the UI.
+   */
+  sellMerchandise?: boolean;
+  merchandiseQtyToBring?: number;
+  merchandiseQtySoldOut?: number;
+  merchandiseNotes?: string;
 }
 
 // ─── Section 3: Concept & objectives ──────────────────────────────────────

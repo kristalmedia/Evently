@@ -14,6 +14,9 @@ export function Section1() {
   const e = formState.errors.s1;
   const category = watch("category");
   const classification = watch("s2.classification");
+  const sellMerch = watch("s2.sellMerchandise");
+  const qtyBring = watch("s2.merchandiseQtyToBring");
+  const qtySold = watch("s2.merchandiseQtySoldOut");
 
   return (
     <SectionShell
@@ -177,6 +180,64 @@ export function Section1() {
           <Input type="date" {...register("s1.conceptDate")} />
         </Field>
       </FieldRow>
+
+      {/* Merchandise sales — toggle first, fields expand when on. */}
+      <div className="rounded-lg border p-4 space-y-3">
+        <Controller
+          control={control}
+          name="s2.sellMerchandise"
+          render={({ field }) => (
+            <label className="flex items-center gap-2 cursor-pointer">
+              <Checkbox
+                checked={!!field.value}
+                onCheckedChange={(v) => field.onChange(Boolean(v))}
+              />
+              <div>
+                <div className="text-sm font-medium">Sell merchandise at this event</div>
+                <div className="text-xs text-muted-foreground">
+                  Track stock allocated + units sold. Both start at 0.
+                </div>
+              </div>
+            </label>
+          )}
+        />
+
+        {sellMerch && (
+          <>
+            <FieldRow>
+              <Field label="Quantity to bring" hint="Stock allocated to the event">
+                <Input
+                  type="number"
+                  min={0}
+                  {...register("s2.merchandiseQtyToBring")}
+                />
+              </Field>
+              <Field label="Quantity sold out" hint="Real-time sales counter">
+                <Input
+                  type="number"
+                  min={0}
+                  {...register("s2.merchandiseQtySoldOut")}
+                />
+              </Field>
+            </FieldRow>
+
+            {/* Soft warning when sold > brought — valid state (pre-orders,
+                re-orders) but worth flagging to the user in case of typo. */}
+            {typeof qtyBring === "number" &&
+              typeof qtySold === "number" &&
+              qtySold > qtyBring && (
+                <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-2 text-xs text-amber-700 dark:text-amber-400">
+                  Sold ({qtySold}) exceeds brought ({qtyBring}) — usually
+                  means pre-orders or a re-order. Verify if this was a typo.
+                </div>
+              )}
+
+            <Field label="Merchandise notes" hint="What's being sold, pricing, supplier, etc.">
+              <Textarea rows={2} {...register("s2.merchandiseNotes")} />
+            </Field>
+          </>
+        )}
+      </div>
     </SectionShell>
   );
 }
