@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { canEditEvent } from "@/lib/permissions";
-import { getEventById } from "@/lib/store";
+import { getEventById, logAudit } from "@/lib/store";
 import { listAttachments, saveAttachment } from "@/lib/attachments";
 
 /**
@@ -59,16 +59,24 @@ export async function POST(
   const saved = [];
   for (const file of files) {
     const bytes = Buffer.from(await file.arrayBuffer());
-    saved.push(
-      saveAttachment({
-        eventId: id,
-        filename: file.name,
-        contentType: file.type,
-        bytes,
-        uploadedByUserId: user.id,
-        uploadedByName: user.fullName,
-      })
-    );
+    const meta = saveAttachment({
+      eventId: id,
+      filename: file.name,
+      contentType: file.type,
+      bytes,
+      uploadedByUserId: user.id,
+      uploadedByName: user.fullName,
+    });
+    saved.push(meta);
+    // One audit line per file — easier to filter later by filename than
+    // a single grouped line, and matches how downloads / deletes are logged.
+    logAudit({
+      kind: "ATTACHMENT_UPLOADED",
+      actor: user,
+      eventId: id,
+      eventRefNo: event.s1.eventRefNo,
+      details: `Uploaded "${meta.filename}" (${meta.size} bytes, ${meta.contentType})`,
+    });
   }
   return NextResponse.json({ uploaded: saved });
 }

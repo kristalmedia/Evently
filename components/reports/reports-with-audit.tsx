@@ -30,6 +30,9 @@ const AUDIT_LABEL: Record<AuditEntry["kind"], string> = {
   STATUS_CHANGED: "Status changed",
   USER_UPDATED: "User updated",
   USER_INVITED: "User invited",
+  ATTACHMENT_UPLOADED: "Attachment uploaded",
+  ATTACHMENT_DOWNLOADED: "Attachment downloaded",
+  ATTACHMENT_DELETED: "Attachment deleted",
 };
 
 const AUDIT_TONE: Partial<Record<AuditEntry["kind"], string>> = {

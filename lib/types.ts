@@ -443,7 +443,10 @@ export type AuditKind =
   | "APPROVAL_DENIED"
   | "STATUS_CHANGED"
   | "USER_UPDATED"
-  | "USER_INVITED";
+  | "USER_INVITED"
+  | "ATTACHMENT_UPLOADED"
+  | "ATTACHMENT_DOWNLOADED"
+  | "ATTACHMENT_DELETED";
 
 export interface AuditEntry {
   id: string;

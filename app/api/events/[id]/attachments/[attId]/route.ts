@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { canEditEvent } from "@/lib/permissions";
+import { getEventById, logAudit } from "@/lib/store";
 import { deleteAttachment, getAttachment } from "@/lib/attachments";
 
 /**
@@ -52,5 +53,15 @@ export async function DELETE(
     return NextResponse.json({ error: "Attachment not found" }, { status: 404 });
   }
   const removed = deleteAttachment(attId);
+  if (removed) {
+    const event = getEventById(id);
+    logAudit({
+      kind: "ATTACHMENT_DELETED",
+      actor: user,
+      eventId: id,
+      eventRefNo: event?.s1.eventRefNo,
+      details: `Deleted "${removed.filename}" (${removed.size} bytes)`,
+    });
+  }
   return NextResponse.json({ deleted: removed });
 }
