@@ -12,6 +12,7 @@ import {
   Settings,
   UserCircle2,
   Radio,
+  Sheet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ const NAV: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, perm: "dashboard.view" },
   { label: "Events", href: "/events", icon: ListChecks, perm: "events.view", section: "Event Management" },
   { label: "Calendar", href: "/calendar", icon: CalendarDays, perm: "calendar.view", section: "Event Management" },
+  { label: "KOTG Bookings", href: "/sales/kotg-bookings", icon: Sheet, perm: "events.create", section: "Event Management" },
   { label: "Users", href: "/users", icon: Users2, perm: "users.manage", section: "Administration" },
   { label: "Reports", href: "/reports", icon: BarChart3, perm: "reports.view" },
   { label: "Notifications", href: "/notifications", icon: Bell, perm: "notifications.view" },
