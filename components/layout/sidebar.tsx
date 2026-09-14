@@ -13,6 +13,7 @@ import {
   UserCircle2,
   Radio,
   Sheet,
+  LifeBuoy,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -39,6 +40,7 @@ const NAV: NavItem[] = [
   { label: "Notifications", href: "/notifications", icon: Bell, perm: "notifications.view" },
   { label: "Settings", href: "/settings", icon: Settings, perm: "system.settings", section: "Administration" },
   { label: "Profile", href: "/profile", icon: UserCircle2, perm: "dashboard.view" },
+  { label: "Help & FAQ", href: "/help", icon: LifeBuoy, perm: "dashboard.view" },
 ];
 
 export function Sidebar() {
