@@ -23,7 +23,8 @@ const SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"];
 
 // Generous range caps — well beyond any realistic row count for a manually
 // maintained sales sheet, cheap to over-request on a values.get call.
-const RANGE_SERVICE_BOOKINGS = "ServiceBookings!A1:V10000";
+// Range extended to W to include LocationDetails (added 2026-09).
+const RANGE_SERVICE_BOOKINGS = "ServiceBookings!A1:W10000";
 const RANGE_CLIENTS = "Clients!A1:M10000";
 const RANGE_CUSTOM_PACKAGES = "CustomPackages!A1:K10000";
 

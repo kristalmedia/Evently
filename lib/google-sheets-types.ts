@@ -35,6 +35,9 @@ export interface SheetServiceBooking {
   ContactPersonEmail: string;
   OwnerEmail: string;
   Quantity: string;
+  /** Free-text venue / location, added to the Sheet by the Sales team.
+   *  Displayed in the event detail page and the KOTG bookings table. */
+  LocationDetails: string;
 }
 
 export interface SheetClient {

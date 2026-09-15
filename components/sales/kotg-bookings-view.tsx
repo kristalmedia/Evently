@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, RefreshCw, Search } from "lucide-react";
+import { AlertTriangle, MapPin, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { Input } from "@/components/ui/input";
@@ -63,6 +63,7 @@ export function KotgBookingsView({
         booking.BookingID,
         booking.QuotationNumber,
         booking.ContactPersonName,
+        booking.LocationDetails,
         client?.ClientName,
         client?.CompanyName,
       ]
@@ -179,6 +180,14 @@ export function KotgBookingsView({
                             {booking.BookingID}
                             {booking.QuotationNumber && ` · ${booking.QuotationNumber}`}
                           </div>
+                          {booking.LocationDetails && (
+                            <div className="mt-1 flex items-start gap-1 text-[0.68rem] text-muted-foreground">
+                              <MapPin className="h-3 w-3 shrink-0 mt-0.5" />
+                              <span className="min-w-0 break-words">
+                                {booking.LocationDetails}
+                              </span>
+                            </div>
+                          )}
                           {customPackage && (
                             <div className="mt-1 flex flex-wrap items-center gap-1">
                               <span className="rounded bg-signal-500/10 text-signal-500 px-1.5 py-0.5 text-[0.6rem] font-mono uppercase tracking-wider">
