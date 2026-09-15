@@ -19,6 +19,12 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { OnAirPill } from "@/components/shared/broadcast-marks";
 import { requireSession } from "@/lib/auth";
 import { canViewBudget } from "@/lib/permissions";
+import {
+  canEditDept,
+  canEditFinance,
+  canEditHr,
+  visibleDeptKeysForShadow,
+} from "@/lib/kotg-permissions";
 import { getKotgBookingsWithClients } from "@/lib/google-sheets";
 import { reconcileKotgBookings } from "@/lib/kotg-sync";
 import {
@@ -28,9 +34,15 @@ import {
   projectKotgBookingRow,
   sumShadowBudget,
 } from "@/lib/kotg-projection";
-import { getOrCreateShadowEvent, MANAGER_DEPT_KEYS } from "@/lib/shadow-events";
+import {
+  getOrCreateShadowEvent,
+  MANAGER_DEPT_KEYS,
+} from "@/lib/shadow-events";
 import type { ShadowEventKemsStatus } from "@/lib/shadow-events-types";
 import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
+import { DeptRosterEditor } from "@/components/kotg/dept-roster-editor";
+import { HrEditor } from "@/components/kotg/hr-editor";
+import { FinanceEditor } from "@/components/kotg/finance-editor";
 import { formatBND, formatDateTime } from "@/lib/utils";
 
 const DEPT_LABEL: Record<string, string> = {
@@ -263,6 +275,66 @@ export default async function EventDetailPage({
           </CardContent>
         </Card>
       )}
+
+      {/* Per-dept roster editors — one card per dept this user can see.
+          Managers see only their own (in edit mode); HR sees every dept
+          in read-only mode once the workflow reaches HR_UNLOCKED;
+          Super Admin sees every dept in edit mode until finance freezes. */}
+      {(() => {
+        const visibleDepts = visibleDeptKeysForShadow(user, shadow.kemsStatus);
+        if (visibleDepts.length === 0) return null;
+        return (
+          <div className="space-y-4">
+            <h2 className="text-lg font-semibold">Department rosters</h2>
+            <div className="grid gap-4 lg:grid-cols-2">
+              {visibleDepts.map((deptKey) => {
+                const initial =
+                  shadow.rosterByDept[deptKey] ?? {
+                    completed: false,
+                    slots: [],
+                    staff: [],
+                  };
+                const editable = canEditDept(user, deptKey, shadow.kemsStatus);
+                return (
+                  <DeptRosterEditor
+                    key={deptKey}
+                    bookingId={bookingId}
+                    deptKey={deptKey}
+                    initial={initial}
+                    readOnly={!editable}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* HR block editor — appears once HR_UNLOCKED. Read-only for
+          non-HR viewers once the block is populated. */}
+      {(shadow.kemsStatus === "HR_UNLOCKED" ||
+        shadow.kemsStatus === "FINANCE_UNLOCKED" ||
+        shadow.kemsStatus === "PUBLISHED") &&
+        canViewBudget(user) && (
+          <HrEditor
+            bookingId={bookingId}
+            initial={shadow.hr.lines}
+            completed={shadow.hr.completed}
+            readOnly={!canEditHr(user, shadow.kemsStatus)}
+          />
+        )}
+
+      {/* Finance block editor — appears once FINANCE_UNLOCKED. */}
+      {(shadow.kemsStatus === "FINANCE_UNLOCKED" ||
+        shadow.kemsStatus === "PUBLISHED") &&
+        canViewBudget(user) && (
+          <FinanceEditor
+            bookingId={bookingId}
+            initial={shadow.finance.lines}
+            completed={shadow.finance.completed}
+            readOnly={!canEditFinance(user, shadow.kemsStatus)}
+          />
+        )}
 
       {/* Program flow — read-only. Editor lands with the roster editor
           work order; for now this just displays whatever's been saved. */}

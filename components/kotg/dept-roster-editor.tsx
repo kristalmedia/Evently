@@ -1,0 +1,227 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { CheckCircle2, Plus, Save, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type {
+  DeptRoster,
+  ShadowDeptKey,
+} from "@/lib/shadow-events-types";
+import type { RosterSlot } from "@/lib/types";
+
+const DEPT_LABEL: Record<ShadowDeptKey, string> = {
+  SALES: "Sales",
+  FINANCE: "Finance",
+  TECH: "Technical",
+  IT: "IT",
+  CCM: "CCM",
+  HR: "HR",
+};
+
+function makeSlotId(): string {
+  return `slot_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * Per-department roster block editor. The current user's department
+ * determines which block appears — Managers only see their own. HR gets
+ * this in read-only mode across every dept once HR_UNLOCKED (rendered
+ * via `readOnly` prop from the parent).
+ *
+ * Save vs Mark complete are separate actions:
+ *   - Save: persists edits, keeps dept editable (kemsStatus stays as-is).
+ *   - Mark complete: same PUT with completed:true, which flips the
+ *     completion flag and (when the last dept flips) advances the
+ *     workflow to HR_UNLOCKED. The button is destructive-tinted since
+ *     it also locks the dept out of further edits.
+ */
+export function DeptRosterEditor({
+  bookingId,
+  deptKey,
+  initial,
+  readOnly = false,
+}: {
+  bookingId: string;
+  deptKey: ShadowDeptKey;
+  initial: DeptRoster;
+  readOnly?: boolean;
+}) {
+  const router = useRouter();
+  const [slots, setSlots] = useState<RosterSlot[]>(initial.slots);
+  const [busy, setBusy] = useState(false);
+
+  function addSlot() {
+    setSlots((prev) => [
+      ...prev,
+      {
+        id: makeSlotId(),
+        date: new Date().toISOString().slice(0, 10),
+        start: "09:00",
+        end: "17:00",
+      },
+    ]);
+  }
+
+  function updateSlot(id: string, patch: Partial<RosterSlot>) {
+    setSlots((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  }
+
+  function removeSlot(id: string) {
+    setSlots((prev) => prev.filter((s) => s.id !== id));
+  }
+
+  async function put(complete: boolean) {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/kotg/${bookingId}/roster`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deptKey,
+          roster: {
+            slots,
+            // Staff-lines stay untouched for now — pivot spec focused on
+            // the slot list; the shape is preserved on the server-side
+            // read but not edited here.
+            staff: initial.staff,
+            completed: complete ? true : initial.completed,
+          },
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
+      toast.success(
+        complete
+          ? `${DEPT_LABEL[deptKey]} roster marked complete`
+          : `${DEPT_LABEL[deptKey]} roster saved`,
+        { position: "bottom-center" },
+      );
+      router.refresh();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const canComplete = !initial.completed && !readOnly && slots.length > 0;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center justify-between gap-2">
+          <span>{DEPT_LABEL[deptKey]} roster</span>
+          {initial.completed && (
+            <span className="text-xs font-normal text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Completed
+            </span>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {slots.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
+            No shifts yet.{" "}
+            {readOnly
+              ? "The department manager hasn't added any."
+              : "Click Add shift to start."}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {slots.map((s) => (
+              <div
+                key={s.id}
+                className="grid gap-2 grid-cols-1 sm:grid-cols-[9rem_6rem_6rem_1fr_auto] items-center rounded-md border p-2"
+              >
+                <Input
+                  type="date"
+                  value={s.date}
+                  onChange={(e) => updateSlot(s.id, { date: e.target.value })}
+                  disabled={readOnly || initial.completed}
+                />
+                <Input
+                  type="time"
+                  value={s.start}
+                  onChange={(e) => updateSlot(s.id, { start: e.target.value })}
+                  disabled={readOnly || initial.completed}
+                />
+                <Input
+                  type="time"
+                  value={s.end}
+                  onChange={(e) => updateSlot(s.id, { end: e.target.value })}
+                  disabled={readOnly || initial.completed}
+                />
+                <Input
+                  placeholder="Staff member (name / email)"
+                  value={s.staffUserId ?? ""}
+                  onChange={(e) => updateSlot(s.id, { staffUserId: e.target.value })}
+                  disabled={readOnly || initial.completed}
+                />
+                {!readOnly && !initial.completed && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeSlot(s.id)}
+                    aria-label="Remove shift"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {!readOnly && !initial.completed && (
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={addSlot}
+              disabled={busy}
+              className="gap-1.5"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add shift
+            </Button>
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => put(false)}
+                disabled={busy}
+                className="gap-1.5"
+              >
+                <Save className="h-3.5 w-3.5" />
+                {busy ? "Saving…" : "Save"}
+              </Button>
+              <Button
+                variant="accent"
+                size="sm"
+                onClick={() => {
+                  if (
+                    !confirm(
+                      `Mark ${DEPT_LABEL[deptKey]} roster complete? You won't be able to edit it after this. When every department completes, HR unlocks next.`,
+                    )
+                  ) {
+                    return;
+                  }
+                  put(true);
+                }}
+                disabled={busy || !canComplete}
+                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Mark complete
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
