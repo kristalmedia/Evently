@@ -62,8 +62,8 @@ export function reconcileKotgBookings(
     }
   }
 
-  // Fire-and-forget — deliberately unawaited. The pattern matches the
-  // existing announceApprovedEvent callers.
+  // Fire-and-forget — deliberately unawaited. Sheet re-fetches must not
+  // wait on SMTP round-trips for the notification broadcast.
   if (pending.length > 0) {
     void Promise.allSettled(pending);
   }

@@ -2,9 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ArrowUpDown, CheckCircle2, FileDown, MapPin, Pencil, Search, Trash2, XCircle } from "lucide-react";
-import { toast } from "sonner";
+import { ArrowRight, ArrowUpDown, MapPin, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,8 +25,6 @@ import { PriorityBadge } from "@/components/shared/priority-badge";
 import { OnAirPill, Callsign } from "@/components/shared/broadcast-marks";
 import { EVENT_STATUSES } from "@/lib/constants";
 import { formatDate } from "@/lib/utils";
-import { canApproveNow, canCancelEvent, canDeleteEvent, canEditEvent } from "@/lib/permissions";
-import { useSessionStore } from "@/stores/session-store";
 import type { EventListRow, EventStatus } from "@/lib/types";
 
 type SortKey = "title" | "startDate" | "status" | "priority";
@@ -186,7 +182,7 @@ export function EventsTable({ rows }: { rows: EventListRow[] }) {
                   Priority <ArrowUpDown className="h-3 w-3" />
                 </button>
               </TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead className="text-right">Details</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -227,7 +223,12 @@ export function EventsTable({ rows }: { rows: EventListRow[] }) {
                     <PriorityBadge priority={row.priority} />
                   </TableCell>
                   <TableCell className="text-right">
-                    <RowActions row={row} />
+                    <Button asChild variant="ghost" size="sm" className="gap-1">
+                      <Link href={`/events/${row.id}`}>
+                        View
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))
@@ -236,164 +237,6 @@ export function EventsTable({ rows }: { rows: EventListRow[] }) {
         </Table>
         </div>
       </div>
-    </div>
-  );
-}
-
-function RowActions({ row }: { row: EventListRow }) {
-  const router = useRouter();
-  const user = useSessionStore((s) => s.user);
-  const [busy, setBusy] = useState(false);
-
-  async function doCancel() {
-    if (!confirm(`Cancel "${row.title}" and move to Archived?`)) return;
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/events/${row.id}/cancel`, { method: "POST" });
-      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
-      toast.success("Event cancelled — moved to Archived", {
-        position: "bottom-center",
-      });
-      router.refresh();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function doDelete() {
-    if (!confirm(`Permanently delete "${row.title}"? This cannot be undone.`)) return;
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/events/${row.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
-      toast.success("Event deleted", { position: "bottom-center" });
-      router.refresh();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function doExportPDF() {
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/events/${row.id}`);
-      if (!res.ok) throw new Error((await res.json()).error ?? "Failed to load event");
-      const { event } = await res.json();
-      const { exportEventPDF } = await import("@/lib/event-pdf");
-      await exportEventPDF(event);
-      toast.success("PDF downloaded", { position: "bottom-center" });
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function doApprove() {
-    // Approval is a consequential, non-reversible action — confirm.
-    const nextStageLabel =
-      row.status === "PENDING_APPROVAL"
-        ? "route it to Jenny for Final Approval"
-        : "publish the event to every registered user";
-    if (
-      !confirm(
-        `Approve "${row.title}"?\n\nThis will ${nextStageLabel}. Continue?`
-      )
-    ) {
-      return;
-    }
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/events/${row.id}/approve`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
-      toast.success(
-        row.status === "PENDING_FINAL_APPROVAL"
-          ? "Fully approved — event published"
-          : "Approved — routed to Final Approver",
-        { position: "bottom-center" }
-      );
-      router.refresh();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const showEdit = canEditEvent(user);
-  const showCancel = canCancelEvent(user);
-  const showDelete = canDeleteEvent(user);
-  const showApprove = canApproveNow(user, row.status);
-
-  return (
-    <div className="inline-flex items-center gap-1">
-      {showApprove && (
-        <Button
-          variant="accent"
-          size="sm"
-          disabled={busy}
-          onClick={doApprove}
-          className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700"
-          title={
-            row.status === "PENDING_FINAL_APPROVAL"
-              ? "Final approval — publish this event"
-              : "Second approval — route to Jenny"
-          }
-        >
-          <CheckCircle2 className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">Approve</span>
-        </Button>
-      )}
-      <Button
-        variant="ghost"
-        size="icon"
-        disabled={busy}
-        title="Export event to PDF"
-        onClick={doExportPDF}
-      >
-        <FileDown className="h-3.5 w-3.5" />
-      </Button>
-      {showEdit && (
-        <Button
-          variant="ghost"
-          size="icon"
-          disabled={busy}
-          title="Edit event (Nabeng / Super Admin only) — works at any status"
-          onClick={() => router.push(`/events/${row.id}/edit`)}
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
-      )}
-      {showCancel && row.status !== "ARCHIVED" && (
-        <Button
-          variant="ghost"
-          size="icon"
-          disabled={busy}
-          title="Cancel event → Archived"
-          onClick={doCancel}
-        >
-          <XCircle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-        </Button>
-      )}
-      {showDelete && (
-        <Button
-          variant="ghost"
-          size="icon"
-          disabled={busy}
-          title="Delete event (Super Admin only)"
-          onClick={doDelete}
-        >
-          <Trash2 className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
-        </Button>
-      )}
     </div>
   );
 }

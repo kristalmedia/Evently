@@ -1,26 +1,54 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Clock, MapPin, Users, CalendarClock, DollarSign, Radio } from "lucide-react";
+import {
+  ArrowLeft,
+  Building2,
+  CalendarClock,
+  ClipboardList,
+  Coins,
+  DollarSign,
+  Info,
+  MapPin,
+  Phone,
+  User as UserIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/shared/page-header";
-import { ExportPDFButton } from "@/components/events/export-pdf-button";
-import { EditEventLink } from "@/components/events/edit-event-link";
-import { BroadcastRosterTable } from "@/components/events/broadcast-roster-table";
-import { WorkflowStageActions, WorkflowStageWaiting } from "@/components/events/workflow-stage-actions";
-import {
-  ProgramFlowView,
-  isProgramFlowVisibleToViewers,
-} from "@/components/events/event-form/program-flow-builder";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { PriorityBadge } from "@/components/shared/priority-badge";
-import { OnAirPill, Callsign } from "@/components/shared/broadcast-marks";
+import { OnAirPill } from "@/components/shared/broadcast-marks";
 import { requireSession } from "@/lib/auth";
-import { canViewBudget, canEditEvent, hasAnyRole, rolesFor } from "@/lib/permissions";
-import { getEventById, projectRow } from "@/lib/store";
+import { canViewBudget } from "@/lib/permissions";
+import { getKotgBookingsWithClients } from "@/lib/google-sheets";
+import { reconcileKotgBookings } from "@/lib/kotg-sync";
+import {
+  kotgDisplayTitle,
+  kotgOrganizerLabel,
+  mapKotgBookingToEventStatus,
+  projectKotgBookingRow,
+  sumShadowBudget,
+} from "@/lib/kotg-projection";
+import { getOrCreateShadowEvent, MANAGER_DEPT_KEYS } from "@/lib/shadow-events";
+import type { ShadowEventKemsStatus } from "@/lib/shadow-events-types";
+import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
 import { formatBND, formatDateTime } from "@/lib/utils";
-import { calculateStaffing, formatDayDate } from "@/lib/roster-calc";
-import { EVENT_TYPES, TIMELINE_PHASE_LABEL, VOG_PILLARS } from "@/lib/constants";
+
+const DEPT_LABEL: Record<string, string> = {
+  SALES: "Sales",
+  FINANCE: "Finance",
+  TECH: "Technical",
+  IT: "IT",
+  CCM: "CCM",
+  HR: "HR",
+};
+
+const KEMS_STATUS_LABEL: Record<ShadowEventKemsStatus, string> = {
+  ACTIVE: "Active — awaiting Managers",
+  MANAGERS_IN_PROGRESS: "Managers in progress",
+  HR_UNLOCKED: "HR filling overtime + meal allowance",
+  FINANCE_UNLOCKED: "Finance filling remaining costs",
+  PUBLISHED: "Published",
+};
 
 export default async function EventDetailPage({
   params,
@@ -28,15 +56,27 @@ export default async function EventDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { user } = await requireSession();
-  const { id } = await params;
-  const event = getEventById(id);
-  if (!event) notFound();
+  const { id: bookingId } = await params;
 
-  const row = projectRow(event);
+  // The event id is now the Sheet BookingID — look it up in the live
+  // KOTG bookings feed. Missing → notFound.
+  let bookings: KotgBookingWithClient[];
+  try {
+    bookings = await getKotgBookingsWithClients();
+    reconcileKotgBookings(bookings);
+  } catch {
+    // A Sheet outage shouldn't 500 an event detail page — degrade to
+    // notFound so the router shows the standard 404 rather than throwing.
+    bookings = [];
+  }
+  const kotg = bookings.find((b) => b.booking.BookingID === bookingId);
+  if (!kotg) notFound();
+
+  const shadow = getOrCreateShadowEvent(bookingId);
+  const row = projectKotgBookingRow(kotg);
   const showBudget = canViewBudget(user);
-  const staffing = calculateStaffing(event.s5.staff ?? []);
-  const totalEstManual = event.s6.costs.reduce((s, c) => s + c.estimatedBND, 0);
-  const totalEst = totalEstManual + staffing.overtimeBND + staffing.mealAllowanceBND;
+  const budget = sumShadowBudget(shadow);
+  const status = mapKotgBookingToEventStatus(kotg.booking.Status, shadow.kemsStatus);
 
   return (
     <div className="space-y-8">
@@ -49,317 +89,293 @@ export default async function EventDetailPage({
       </div>
 
       <PageHeader
-        eyebrow={event.s1.eventRefNo}
-        title={event.s1.eventName}
-        description={event.s3.description}
+        eyebrow={kotg.booking.QuotationNumber || bookingId}
+        title={kotgDisplayTitle(kotg)}
+        description={kotg.booking.Notes || undefined}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {row.isLive && <OnAirPill />}
-            <StatusBadge status={event.status} />
-            <PriorityBadge priority={event.priority} />
-            {canEditEvent(user) && <EditEventLink eventId={event.id} />}
-            <ExportPDFButton event={event} showBudget={showBudget} />
+            <StatusBadge status={status} />
           </div>
         }
       />
 
-      {/* Workflow action panel — shows a panel to whoever is on the hook
-          (Finance Lead during BUDGET_PENDING, Manager during
-          STAFFING_IN_PROGRESS, Finance Lead again during FINANCIAL_REVIEW),
-          or a read-only status blurb to everyone else. */}
-      {(event.status === "BUDGET_PENDING" ||
-        event.status === "STAFFING_IN_PROGRESS" ||
-        event.status === "FINANCIAL_REVIEW") && (
-        <>
-          <WorkflowStageActions eventId={event.id} status={event.status} userRoles={rolesFor(user)} />
-          {!hasAnyRole(user, ["MANAGER", "FINANCE_LEAD", "SUPER_ADMIN"]) && (
-            <WorkflowStageWaiting status={event.status} />
-          )}
-        </>
-      )}
+      {/* KEMS workflow banner — where in the per-dept / HR / Finance flow
+          this booking currently sits. Read-only in this pass; editors
+          land in the follow-up work orders. */}
+      <Card className="border-accent/30 bg-accent/[0.04]">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <ClipboardList className="h-4 w-4 text-accent" />
+            KEMS workflow
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="text-sm">
+            <span className="font-medium">{KEMS_STATUS_LABEL[shadow.kemsStatus]}</span>
+            {shadow.activeNotifiedAt && (
+              <span className="text-muted-foreground text-xs ml-2">
+                (all-hands notified{" "}
+                {new Date(shadow.activeNotifiedAt).toLocaleString("en-GB")})
+              </span>
+            )}
+          </div>
+          <DeptCompletionGrid shadow={shadow} />
+        </CardContent>
+      </Card>
 
-      {/* Quick facts */}
+      {/* Quick facts — pulled straight from the Sheet booking. */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <QuickFact
           icon={CalendarClock}
           label="Start"
-          value={formatDateTime(event.s1.startDate)}
+          value={formatDateTime(kotg.booking.StartDate)}
         />
         <QuickFact
           icon={CalendarClock}
           label="End"
-          value={formatDateTime(event.s1.endDate)}
+          value={formatDateTime(kotg.booking.EndDate)}
         />
-        <QuickFact icon={MapPin} label="Venue" value={event.s1.venue} />
         <QuickFact
-          icon={Users}
-          label="Expected attendance"
-          value={
-            event.s1.expectedAttendance
-              ? event.s1.expectedAttendance.toLocaleString()
-              : "—"
-          }
+          icon={MapPin}
+          label="Venue"
+          value={kotg.booking.LocationDetails || "TBC"}
+        />
+        <QuickFact
+          icon={Building2}
+          label="Client"
+          value={kotgOrganizerLabel(kotg)}
         />
       </div>
 
-      {/* Budget Summary — moved above Concept & Objectives (spec §4) */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Booking details from the Sheet */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Info className="h-4 w-4 text-accent" />
+              Booking details
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <InfoRow label="Service" value={kotg.booking.ServiceName} />
+            {kotg.customPackage && (
+              <>
+                <InfoRow label="Custom package" value={kotg.customPackage.PackageName} />
+                {showBudget && (
+                  <InfoRow
+                    label="Package final price"
+                    value={
+                      kotg.customPackage.FinalPrice ||
+                      kotg.customPackage.ComputedTotal ||
+                      "—"
+                    }
+                  />
+                )}
+              </>
+            )}
+            {showBudget && !kotg.customPackage && (
+              <InfoRow label="Booking price" value={kotg.booking.Price || "—"} />
+            )}
+            <InfoRow label="Quantity" value={kotg.booking.Quantity} />
+            <InfoRow label="Days of week" value={kotg.booking.DaysOfWeek} />
+            <InfoRow label="Booking status (Sheet)" value={kotg.booking.Status} />
+            <InfoRow
+              label="Confirmation"
+              value={kotg.booking.ConfirmationStatus}
+            />
+            <InfoRow label="Sheet notes" value={kotg.booking.Notes} />
+          </CardContent>
+        </Card>
+
+        {/* Client contact block */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <UserIcon className="h-4 w-4 text-accent" />
+              Client &amp; contact
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {kotg.client ? (
+              <>
+                <InfoRow label="Company" value={kotg.client.CompanyName} />
+                <InfoRow label="Client name" value={kotg.client.ClientName} />
+                <InfoRow label="Industry" value={kotg.client.Industry} />
+                <InfoRow label="Contact person (client)" value={kotg.client.ContactPerson} />
+                <InfoRow label="Email" value={kotg.client.Email} />
+                <InfoRow label="Phone" value={kotg.client.Phone} />
+              </>
+            ) : (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-700 dark:text-amber-400">
+                Unmatched client — ClientID {kotg.booking.ClientID || "(blank)"}{" "}
+                from the booking wasn't found in the Clients sheet.
+              </div>
+            )}
+            <div className="pt-2 border-t space-y-2">
+              <div className="callsign">Booking contact (from ServiceBookings)</div>
+              <div className="flex items-center gap-2 text-sm">
+                <UserIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>{kotg.booking.ContactPersonName || "—"}</span>
+              </div>
+              <div className="flex items-center gap-2 text-sm font-mono">
+                <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>{kotg.booking.ContactPersonEmail || "—"}</span>
+              </div>
+              {kotg.booking.AgentEmail && (
+                <div className="text-xs text-muted-foreground">
+                  Sales agent: {kotg.booking.AgentEmail}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Budget summary — HR OT/meal + Finance-owned other lines from
+          the shadow record. Empty state until the editors are wired. */}
       {showBudget && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-accent" />
-              Budget summary
+              KEMS budget summary
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <BudgetStat label="Manual costs" value={formatBND(totalEstManual)} />
+              <BudgetStat label="Overtime (HR)" value={formatBND(budget.overtimeBND)} />
               <BudgetStat
-                label="Auto (roster)"
-                value={formatBND(staffing.overtimeBND + staffing.mealAllowanceBND)}
+                label="Meal allowance (HR)"
+                value={formatBND(budget.mealAllowanceBND)}
               />
-              <BudgetStat label="Grand total" value={formatBND(totalEst)} />
+              <BudgetStat
+                label="Other (Finance)"
+                value={formatBND(budget.otherEstBND)}
+              />
             </div>
-            {event.s6.costs.length > 0 && (
-              <div className="mt-4 pt-4 border-t space-y-1.5">
-                <div className="callsign">Cost lines</div>
-                <div className="text-sm font-mono text-muted-foreground">
-                  {event.s6.costs.length} lines across{" "}
-                  {new Set(event.s6.costs.map((c) => c.group)).size} groups ·{" "}
-                  {staffing.slotCount} roster shifts
-                </div>
-              </div>
-            )}
+            <div className="mt-4 pt-4 border-t flex items-center justify-between">
+              <span className="callsign">Grand total (est.)</span>
+              <span className="text-lg font-mono font-semibold text-accent">
+                {formatBND(budget.totalEstBND)}
+              </span>
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Concept + Broadcast */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Concept & objectives</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <InfoRow label="Description" value={event.s3.description} />
-            <InfoRow
-              label="Broadcast / content angle"
-              value={event.s3.broadcastAngle}
-            />
-            <div>
-              <div className="callsign mb-2">Objectives</div>
-              {event.s3.objectives.length === 0 ? (
-                <p className="text-sm text-muted-foreground">None recorded.</p>
-              ) : (
-                <ol className="space-y-1.5">
-                  {event.s3.objectives.map((o, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm">
-                      <span className="font-mono text-xs text-muted-foreground pt-0.5">
-                        {String(i + 1).padStart(2, "0")}
-                      </span>
-                      <span>{o}</span>
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </div>
-            <InfoRow label="Target audience" value={event.s3.targetAudience} />
-            <InfoRow label="Success metrics" value={event.s3.successMetrics} />
-            <InfoRow label="Brand link" value={event.s3.brandLink} />
-          </CardContent>
-        </Card>
-
+      {/* Program flow — read-only. Editor lands with the roster editor
+          work order; for now this just displays whatever's been saved. */}
+      {shadow.programFlow.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Radio className="h-4 w-4 text-accent" />
-              Broadcast & content plan
+              <Coins className="h-4 w-4 text-accent" />
+              Program flow
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <InfoRow
-              label="Live broadcast"
-              value={
-                event.s8.liveBroadcast === "YES"
-                  ? "Yes"
-                  : event.s8.liveBroadcast === "NO"
-                    ? "No"
-                    : "TBC"
-              }
-            />
-            <InfoRow
-              label="Platforms"
-              value={event.s8.platforms.join(", ") || "—"}
-            />
-            {event.s8.schedule && event.s8.schedule.length > 0 && (
-              <div>
-                <div className="callsign mb-2">Broadcast schedule</div>
-                <div className="space-y-1.5">
-                  {event.s8.schedule.map((day, di) => (
-                    <div key={di} className="text-sm">
-                      <span className="font-medium">{formatDayDate(day.date)}</span>
-                      <span className="text-muted-foreground">
-                        {" — "}
-                        {day.slots
-                          .map((s) => `${s.start}–${s.end}`)
-                          .join(", ") || "no slots"}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {/* Roster per broadcast day (spec §3) */}
-            <div className="pt-2">
-              <BroadcastRosterTable event={event} />
-            </div>
-            <InfoRow
-              label="Social platforms"
-              value={event.s8.socialPlatforms.join(", ") || "—"}
-            />
-            <InfoRow label="Hashtags" value={event.s8.hashtags.join(" ") || "—"} />
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Nature */}
-      <div className="grid gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Nature</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <div className="callsign mb-2">Event types</div>
-              <div className="flex flex-wrap gap-1.5">
-                {event.s2.types.length === 0 ? (
-                  <span className="text-sm text-muted-foreground">—</span>
-                ) : (
-                  event.s2.types.map((t) => (
-                    <span
-                      key={t}
-                      className="rounded-md bg-secondary px-2 py-1 text-xs font-medium"
-                    >
-                      {EVENT_TYPES.find((e) => e.value === t)?.label ?? t}
-                    </span>
-                  ))
-                )}
-              </div>
-            </div>
-            <InfoRow
-              label="Classification"
-              value={
-                event.s2.classification === "COMMERCIAL"
-                  ? "💰 Commercial / Paid"
-                  : "🤝 Community / CSR"
-              }
-            />
-            {event.s2.classification === "COMMUNITY_CSR" && event.s2.vogPillars?.length ? (
-              <div>
-                <div className="callsign mb-2">Voice of Good</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {event.s2.vogPillars.map((p) => {
-                    const meta = VOG_PILLARS.find((v) => v.value === p);
-                    return (
-                      <span
-                        key={p}
-                        className="rounded-md bg-accent/10 text-accent px-2 py-1 text-xs font-medium"
-                      >
-                        {meta?.icon} {meta?.label ?? p}
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
-            {event.s2.classification === "COMMERCIAL" && (
-              <>
-                <InfoRow label="Client" value={event.s2.clientName} />
-                {showBudget && (
-                  <InfoRow
-                    label="Agreed fee"
-                    value={formatBND(event.s2.agreedFeeBND ?? 0)}
-                  />
-                )}
-                <InfoRow label="Scope" value={event.s2.scopeOfServices} />
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Program flow / run-of-show — visible to all users once the event
-          is approved (spec: hidden until officially approved, then all
-          users gain read access). Editors also see it on the edit form
-          during DRAFT so they can author it. */}
-      {(event.s1.programFlow?.length ?? 0) > 0 &&
-        (isProgramFlowVisibleToViewers(event.status) || canEditEvent(user)) && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-4 w-4 text-accent" />
-                Program flow
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ProgramFlowView steps={event.s1.programFlow} />
-            </CardContent>
-          </Card>
-        )}
-
-      {/* Timeline progress */}
-      {event.s7.tasks.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Timeline progress</CardTitle>
-          </CardHeader>
           <CardContent>
-            <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-              {(
-                ["CONCEPT_APPROVAL", "PRODUCTION_LOGISTICS", "BROADCAST_CONTENT", "EVENT_DAY", "POST_EVENT"] as const
-              ).map((phase) => {
-                const tasks = event.s7.tasks.filter((t) => t.phase === phase);
-                const done = tasks.filter((t) => t.status === "DONE").length;
-                return (
-                  <div key={phase} className="space-y-1.5 rounded-lg border p-3">
-                    <div className="callsign">{TIMELINE_PHASE_LABEL[phase]}</div>
-                    <div className="text-lg font-mono">
-                      {done}
-                      <span className="text-muted-foreground">/{tasks.length}</span>
+            <ol className="space-y-2">
+              {[...shadow.programFlow]
+                .sort((a, b) => a.time.localeCompare(b.time))
+                .map((step) => (
+                  <li
+                    key={step.id}
+                    className="flex items-start gap-3 rounded-lg border p-3"
+                  >
+                    <div className="font-mono text-sm shrink-0">{step.time}</div>
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="text-sm font-medium">{step.activity}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Owner: {step.owner}
+                      </div>
+                      {step.notes && (
+                        <div className="text-xs text-muted-foreground">
+                          {step.notes}
+                        </div>
+                      )}
                     </div>
-                    <div className="h-1 rounded-full bg-muted">
-                      <div
-                        className="h-full rounded-full bg-accent"
-                        style={{
-                          width: tasks.length ? `${(done / tasks.length) * 100}%` : "0%",
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  </li>
+                ))}
+            </ol>
           </CardContent>
         </Card>
       )}
+    </div>
+  );
+}
 
-      {/* Debrief if present */}
-      {event.status === "COMPLETED" && event.s10.overallRating && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Debrief</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <BudgetStat label="Attendance" value={event.s10.actualAttendance?.toString() ?? "—"} />
-              <BudgetStat label="Broadcast reach" value={event.s10.broadcastReach?.toString() ?? "—"} />
-              <BudgetStat label="Rating" value={`${event.s10.overallRating} / 5`} />
-            </div>
-            <InfoRow label="What went well" value={event.s10.whatWentWell} />
-            <InfoRow label="Improvements" value={event.s10.improvements} />
-          </CardContent>
-        </Card>
-      )}
+/** Grid of dept-completion chips + HR/Finance chips. Read-only in this
+ *  pass — clicking one will open the corresponding editor in a follow-up. */
+function DeptCompletionGrid({
+  shadow,
+}: {
+  shadow: import("@/lib/shadow-events-types").ShadowEventRecord;
+}) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+      {MANAGER_DEPT_KEYS.map((k) => {
+        const dept = shadow.rosterByDept[k];
+        const completed = dept?.completed === true;
+        const started =
+          !!dept && (completed || dept.slots.length > 0 || dept.staff.length > 0);
+        return (
+          <CompletionChip
+            key={k}
+            label={DEPT_LABEL[k] ?? k}
+            state={completed ? "done" : started ? "in-progress" : "not-started"}
+          />
+        );
+      })}
+      <CompletionChip
+        label="HR (OT + meals)"
+        state={
+          shadow.hr.completed
+            ? "done"
+            : shadow.kemsStatus === "HR_UNLOCKED" ||
+              shadow.kemsStatus === "FINANCE_UNLOCKED" ||
+              shadow.kemsStatus === "PUBLISHED"
+            ? "in-progress"
+            : "locked"
+        }
+      />
+      <CompletionChip
+        label="Finance (other)"
+        state={
+          shadow.finance.completed
+            ? "done"
+            : shadow.kemsStatus === "FINANCE_UNLOCKED" ||
+              shadow.kemsStatus === "PUBLISHED"
+            ? "in-progress"
+            : "locked"
+        }
+      />
+    </div>
+  );
+}
+
+function CompletionChip({
+  label,
+  state,
+}: {
+  label: string;
+  state: "not-started" | "in-progress" | "done" | "locked";
+}) {
+  const cls =
+    state === "done"
+      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+      : state === "in-progress"
+      ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
+      : state === "locked"
+      ? "bg-muted text-muted-foreground border-border"
+      : "bg-secondary text-foreground/70 border-border";
+  const icon = state === "done" ? "✓" : state === "in-progress" ? "…" : state === "locked" ? "🔒" : "○";
+  return (
+    <div
+      className={`rounded-md border px-2.5 py-1.5 text-xs flex items-center gap-2 ${cls}`}
+    >
+      <span className="font-mono">{icon}</span>
+      <span className="truncate">{label}</span>
     </div>
   );
 }
@@ -379,7 +395,7 @@ function QuickFact({
         <Icon className="h-3.5 w-3.5" />
         <span className="callsign">{label}</span>
       </div>
-      <div className="text-sm font-medium truncate">{value}</div>
+      <div className="text-sm font-medium truncate">{value || "—"}</div>
     </div>
   );
 }
@@ -395,25 +411,11 @@ function InfoRow({ label, value }: { label: string; value?: string }) {
   );
 }
 
-function BudgetStat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: "emerald" | "rose";
-}) {
-  const cls =
-    tone === "emerald"
-      ? "text-emerald-600 dark:text-emerald-400"
-      : tone === "rose"
-        ? "text-destructive"
-        : "text-foreground";
+function BudgetStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="space-y-1">
       <div className="callsign">{label}</div>
-      <div className={`text-lg font-mono font-semibold ${cls}`}>{value}</div>
+      <div className="text-lg font-mono font-semibold text-foreground">{value}</div>
     </div>
   );
 }
