@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useDirectoryUsers } from "@/hooks/use-directory-users";
 import type {
   DeptRoster,
   ShadowDeptKey,
@@ -54,6 +55,31 @@ export function DeptRosterEditor({
   const router = useRouter();
   const [slots, setSlots] = useState<RosterSlot[]>(initial.slots);
   const [busy, setBusy] = useState(false);
+  const { users } = useDirectoryUsers();
+
+  // Suggest this dept's own users first in the picker (Sales manager
+  // most likely wants a Sales staffer). Everyone else follows so cross-
+  // dept borrowing still works with a scroll.
+  const deptDeptMap: Record<ShadowDeptKey, string> = {
+    SALES: "Sales",
+    FINANCE: "Finance",
+    TECH: "Technical",
+    IT: "IT",
+    CCM: "CCM",
+    HR: "HR",
+  };
+  const sortedUsers = useMemo(() => {
+    const own = deptDeptMap[deptKey];
+    return [...users].sort((a, b) => {
+      const aOwn = a.department === own ? 0 : 1;
+      const bOwn = b.department === own ? 0 : 1;
+      if (aOwn !== bOwn) return aOwn - bOwn;
+      return a.fullName.localeCompare(b.fullName);
+    });
+    // deptKey never changes during the editor's lifetime; users identity
+    // is the only real dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [users, deptKey]);
 
   function addSlot() {
     setSlots((prev) => [
@@ -156,12 +182,32 @@ export function DeptRosterEditor({
                   onChange={(e) => updateSlot(s.id, { end: e.target.value })}
                   disabled={readOnly || initial.completed}
                 />
-                <Input
-                  placeholder="Staff member (name / email)"
+                {/* Native select over the directory. A real combobox
+                    with type-ahead would be nicer but keeps parity with
+                    the dept-select style already used elsewhere and
+                    avoids a Radix Popover dependency. */}
+                <select
+                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                   value={s.staffUserId ?? ""}
                   onChange={(e) => updateSlot(s.id, { staffUserId: e.target.value })}
                   disabled={readOnly || initial.completed}
-                />
+                >
+                  <option value="">— select staff —</option>
+                  {sortedUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.fullName} · {u.department}
+                    </option>
+                  ))}
+                  {/* Legacy free-text values from before this rework
+                      will not match any user id; surface them so they
+                      don't silently disappear. */}
+                  {s.staffUserId &&
+                    !sortedUsers.some((u) => u.id === s.staffUserId) && (
+                      <option value={s.staffUserId}>
+                        (unresolved) {s.staffUserId}
+                      </option>
+                    )}
+                </select>
                 {!readOnly && !initial.completed && (
                   <Button
                     variant="ghost"
