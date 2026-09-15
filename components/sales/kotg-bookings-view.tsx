@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, MapPin, RefreshCw, Search } from "lucide-react";
+import Link from "next/link";
+import { AlertTriangle, ArrowRight, MapPin, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { Input } from "@/components/ui/input";
@@ -156,12 +157,13 @@ export function KotgBookingsView({
                     <TableHead className="hidden lg:table-cell">Dates</TableHead>
                     <TableHead className="hidden sm:table-cell">Price</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Details</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filtered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
                         No bookings match your search.
                       </TableCell>
                     </TableRow>
@@ -252,6 +254,17 @@ export function KotgBookingsView({
                               </span>
                             )}
                           </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {/* Cross-link to the KEMS event detail page —
+                              the /events/[id] route resolves BookingID
+                              back to this Sheet row via the shadow store. */}
+                          <Button asChild variant="ghost" size="sm" className="gap-1">
+                            <Link href={`/events/${booking.BookingID}`}>
+                              View details
+                              <ArrowRight className="h-3.5 w-3.5" />
+                            </Link>
+                          </Button>
                         </TableCell>
                       </TableRow>
                     ))
