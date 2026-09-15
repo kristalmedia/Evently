@@ -72,18 +72,20 @@ export function canEditDept(
 }
 
 /** HR can edit their block once the workflow reaches HR_UNLOCKED and
- *  until the workflow freezes at PUBLISHED. */
+ *  until the workflow freezes at PUBLISHED.
+ *
+ *  Super Admin bypasses ALL the gates here — including the PUBLISHED
+ *  freeze — so IT can always fix a mis-typed OT amount or a wrong
+ *  meal tick without having to reopen a Sheet booking. That matches
+ *  Super Admin's role as a god-mode override across every other
+ *  workflow in KEMS. */
 export function canEditHr(
   user: User | null | undefined,
   kemsStatus: ShadowEventKemsStatus,
 ): boolean {
   if (!user || user.status === "disabled") return false;
+  if (isSuperAdmin(user)) return true;
   if (kemsStatus === "PUBLISHED") return false;
-  if (isSuperAdmin(user)) {
-    return (
-      kemsStatus === "HR_UNLOCKED" || kemsStatus === "FINANCE_UNLOCKED"
-    );
-  }
   if (!hasRole(user, "HR")) return false;
   return kemsStatus === "HR_UNLOCKED" || kemsStatus === "FINANCE_UNLOCKED";
 }

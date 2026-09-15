@@ -18,7 +18,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { OnAirPill } from "@/components/shared/broadcast-marks";
 import { requireSession } from "@/lib/auth";
-import { canViewBudget } from "@/lib/permissions";
+import { canViewBudget, hasRole, isSuperAdmin } from "@/lib/permissions";
 import { getAllUsers } from "@/lib/store";
 import {
   canEditDept,
@@ -368,6 +368,13 @@ export default async function EventDetailPage({
             initialOvertime={shadow.hr.overtime}
             completed={shadow.hr.completed}
             readOnly={!canEditHr(user, shadow.kemsStatus)}
+            viewerDiagnostic={{
+              role: user.role,
+              secondaryRole: user.secondaryRole,
+              kemsStatus: shadow.kemsStatus,
+              isSuperAdmin: isSuperAdmin(user),
+              isHr: hasRole(user, "HR"),
+            }}
           />
         )}
 

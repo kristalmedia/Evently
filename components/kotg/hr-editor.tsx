@@ -85,6 +85,7 @@ export function HrEditor({
   initialOvertime,
   completed,
   readOnly = false,
+  viewerDiagnostic,
 }: {
   bookingId: string;
   /** Booking header info for the exports — title, client, venue. Passed
@@ -95,6 +96,17 @@ export function HrEditor({
   initialOvertime: OvertimeLine[];
   completed: boolean;
   readOnly?: boolean;
+  /** Server-computed diagnostic — displayed in the read-only banner so
+   *  the user can see exactly why edits are frozen (role mismatch,
+   *  wrong workflow stage, block already completed). Removed once the
+   *  permission story stabilises. */
+  viewerDiagnostic?: {
+    role: string;
+    secondaryRole?: string;
+    kemsStatus: string;
+    isSuperAdmin: boolean;
+    isHr: boolean;
+  };
 }) {
   const router = useRouter();
   const [ticks, setTicks] = useState<MealTickMap>(initialMealTicks);
@@ -246,19 +258,30 @@ export function HrEditor({
         {(readOnly || completed) && (
           <div className="rounded-md border border-muted bg-muted/30 p-3 text-xs flex items-start gap-2">
             <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
-            <div className="min-w-0">
+            <div className="min-w-0 space-y-1">
               {completed ? (
-                <>
+                <div>
                   <span className="font-medium">Read-only — HR block completed.</span>{" "}
-                  Ticks and OT rows are frozen. Only a Super Admin can reopen
-                  by editing the shadow record directly.
-                </>
+                  Ticks and OT rows are frozen. Super Admin can reopen by
+                  editing the shadow record directly.
+                </div>
               ) : (
-                <>
+                <div>
                   <span className="font-medium">Read-only — you don't have HR edit access.</span>{" "}
                   Only users with the HR role (or Super Admin) can tick meal
                   allowance / edit overtime on this booking.
-                </>
+                </div>
+              )}
+              {viewerDiagnostic && (
+                <div className="font-mono text-[0.68rem] text-muted-foreground pt-1 border-t border-border/60 mt-1">
+                  You are: role={viewerDiagnostic.role}
+                  {viewerDiagnostic.secondaryRole
+                    ? ` (+${viewerDiagnostic.secondaryRole})`
+                    : ""}
+                  {" · "}kemsStatus={viewerDiagnostic.kemsStatus}
+                  {" · "}completed={String(completed)}
+                  {" · "}readOnly={String(readOnly)}
+                </div>
               )}
             </div>
           </div>
