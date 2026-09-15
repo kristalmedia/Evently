@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/shared/page-header";
 import { KotgBookingsView } from "@/components/sales/kotg-bookings-view";
 import { requireSession } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { can, isSuperAdmin } from "@/lib/permissions";
 import { getKotgBookingsWithClients } from "@/lib/google-sheets";
 import { reconcileKotgBookings } from "@/lib/kotg-sync";
 import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
@@ -36,7 +36,12 @@ export default async function KotgBookingsPage() {
         title="KOTG Bookings"
         description="Live from the Sales team's ServiceBookings Sheet — Category = Kristal On The Go, joined with Clients."
       />
-      <KotgBookingsView initialBookings={initialBookings} initialError={initialError} />
+      <KotgBookingsView
+        initialBookings={initialBookings}
+        initialError={initialError}
+        viewerDepartment={user.department}
+        viewerIsSuperAdmin={isSuperAdmin(user)}
+      />
     </div>
   );
 }

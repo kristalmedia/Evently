@@ -20,18 +20,51 @@ import {
 import { EmptyState } from "@/components/shared/empty-state";
 import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
 
+/** Sheet-Status values that should be hidden from the KOTG bookings
+ *  view. Cancelled bookings still exist in the Sheet (Sales keeps them
+ *  for audit) but Kristal Operations shouldn't see them mixed in with
+ *  live work. Matched case-insensitively + trimmed. */
+const HIDDEN_SHEET_STATUSES = new Set(["cancelled", "canceled"]);
+
+/** Whether this viewer is allowed to see the Contact column. Kept
+ *  narrow per the spec: Sales dept + Super Admin only — even CCM Admins
+ *  (who can otherwise use the KOTG bookings page) don't see contact
+ *  details, since those are the Sales team's client-owned surface. */
+function canViewContact(dept: string, isSuperAdmin: boolean): boolean {
+  return isSuperAdmin || dept === "Sales";
+}
+
 export function KotgBookingsView({
   initialBookings,
   initialError,
+  viewerDepartment,
+  viewerIsSuperAdmin,
 }: {
   initialBookings: KotgBookingWithClient[];
   initialError: string | null;
+  /** User.department of the viewer — determines whether the Contact
+   *  column is rendered. Passed from the server page so this component
+   *  doesn't have to reach into the session store. */
+  viewerDepartment: string;
+  viewerIsSuperAdmin: boolean;
 }) {
   const [bookings, setBookings] = useState(initialBookings);
   const [error, setError] = useState(initialError);
   const [q, setQ] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [lastFetchedAt, setLastFetchedAt] = useState<string | null>(null);
+
+  const showContact = canViewContact(viewerDepartment, viewerIsSuperAdmin);
+
+  // Bookings passed through the hidden-status filter once, at the top of
+  // every render — every downstream count/list works from `visible`.
+  const visible = useMemo(
+    () =>
+      bookings.filter(
+        (b) => !HIDDEN_SHEET_STATUSES.has(b.booking.Status.trim().toLowerCase()),
+      ),
+    [bookings],
+  );
 
   async function refresh() {
     setRefreshing(true);
@@ -44,7 +77,10 @@ export function KotgBookingsView({
       setBookings(data.bookings);
       setLastFetchedAt(data.fetchedAt);
       setError(null);
-      toast.success(`Refreshed — ${data.bookings.length} bookings`, {
+      const visibleCount = (data.bookings as KotgBookingWithClient[]).filter(
+        (b) => !HIDDEN_SHEET_STATUSES.has(b.booking.Status.trim().toLowerCase()),
+      ).length;
+      toast.success(`Refreshed — ${visibleCount} active bookings`, {
         position: "bottom-center",
       });
     } catch (e) {
@@ -57,13 +93,16 @@ export function KotgBookingsView({
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
-    if (!query) return bookings;
-    return bookings.filter(({ booking, client }) => {
+    if (!query) return visible;
+    return visible.filter(({ booking, client }) => {
       const haystack = [
         booking.ServiceName,
         booking.BookingID,
         booking.QuotationNumber,
-        booking.ContactPersonName,
+        // Contact only enters the search haystack for viewers allowed to
+        // see it — otherwise search would leak contact hits to viewers
+        // who can't see the column.
+        showContact ? booking.ContactPersonName : undefined,
         booking.LocationDetails,
         client?.ClientName,
         client?.CompanyName,
@@ -73,9 +112,9 @@ export function KotgBookingsView({
         .toLowerCase();
       return haystack.includes(query);
     });
-  }, [q, bookings]);
+  }, [q, visible, showContact]);
 
-  const missingClientCount = bookings.filter((b) => !b.client).length;
+  const missingClientCount = visible.filter((b) => !b.client).length;
 
   if (error && bookings.length === 0) {
     return (
@@ -118,7 +157,7 @@ export function KotgBookingsView({
             </Badge>
           )}
           <span className="text-xs callsign">
-            {filtered.length} of {bookings.length}
+            {filtered.length} of {visible.length}
           </span>
           <Button variant="outline" size="sm" className="gap-2" onClick={refresh} disabled={refreshing}>
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
@@ -138,11 +177,15 @@ export function KotgBookingsView({
         </div>
       )}
 
-      {bookings.length === 0 ? (
+      {visible.length === 0 ? (
         <EmptyState
           icon={Search}
-          title="No KOTG bookings found"
-          description='No ServiceBookings rows have Category = "KRISTAL On The Go" right now.'
+          title="No active KOTG bookings"
+          description={
+            bookings.length === 0
+              ? 'No ServiceBookings rows have Category = "KRISTAL On The Go" right now.'
+              : "Every KOTG booking is currently Cancelled — Sales keeps those for audit but they're hidden here."
+          }
         />
       ) : (
         <Card>
@@ -153,7 +196,9 @@ export function KotgBookingsView({
                   <TableRow>
                     <TableHead>Booking</TableHead>
                     <TableHead>Client</TableHead>
-                    <TableHead className="hidden md:table-cell">Contact</TableHead>
+                    {showContact && (
+                      <TableHead className="hidden md:table-cell">Contact</TableHead>
+                    )}
                     <TableHead className="hidden lg:table-cell">Dates</TableHead>
                     <TableHead className="hidden sm:table-cell">Price</TableHead>
                     <TableHead>Status</TableHead>
@@ -163,7 +208,10 @@ export function KotgBookingsView({
                 <TableBody>
                   {filtered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                      <TableCell
+                        colSpan={showContact ? 7 : 6}
+                        className="text-center py-12 text-muted-foreground"
+                      >
                         No bookings match your search.
                       </TableCell>
                     </TableRow>
@@ -230,14 +278,16 @@ export function KotgBookingsView({
                             </span>
                           )}
                         </TableCell>
-                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                          {booking.ContactPersonName || client?.ContactPerson || "—"}
-                          {(booking.ContactPersonEmail || client?.Email) && (
-                            <div className="text-xs font-mono">
-                              {booking.ContactPersonEmail || client?.Email}
-                            </div>
-                          )}
-                        </TableCell>
+                        {showContact && (
+                          <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                            {booking.ContactPersonName || client?.ContactPerson || "—"}
+                            {(booking.ContactPersonEmail || client?.Email) && (
+                              <div className="text-xs font-mono">
+                                {booking.ContactPersonEmail || client?.Email}
+                              </div>
+                            )}
+                          </TableCell>
+                        )}
                         <TableCell className="hidden lg:table-cell text-sm text-muted-foreground whitespace-nowrap">
                           {booking.StartDate || "—"}
                           {booking.EndDate && ` → ${booking.EndDate}`}
