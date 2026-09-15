@@ -358,7 +358,13 @@ export function HrEditor({
             </div>
           ) : (
             <>
-              {/* Desktop / tablet: real table for density */}
+              {/* Desktop / tablet: real table for density. Toggle
+                  cells are explicit <button>s (not native <input
+                  type=checkbox>) because the native control's
+                  disabled/checked state was ambiguous in the dark
+                  theme and — critically — its click event was being
+                  silently swallowed in some Windows browser builds.
+                  Buttons are unambiguously visible AND reliable. */}
               <div className="hidden sm:block rounded-md border overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/40 text-xs">
@@ -387,23 +393,19 @@ export function HrEditor({
                             {r.start}–{r.end}
                           </td>
                           <td className="text-center px-2 py-1.5">
-                            <input
-                              type="checkbox"
-                              className="h-5 w-5 cursor-pointer"
-                              checked={t.am}
-                              onChange={() => toggleTick(r.slotId, "am")}
+                            <ToggleBox
+                              on={t.am}
+                              onClick={() => toggleTick(r.slotId, "am")}
                               disabled={readOnly || completed}
-                              aria-label={`AM meal allowance for ${r.staffName || "shift"}`}
+                              label={`AM meal allowance for ${r.staffName || "shift"}`}
                             />
                           </td>
                           <td className="text-center px-2 py-1.5">
-                            <input
-                              type="checkbox"
-                              className="h-5 w-5 cursor-pointer"
-                              checked={t.pm}
-                              onChange={() => toggleTick(r.slotId, "pm")}
+                            <ToggleBox
+                              on={t.pm}
+                              onClick={() => toggleTick(r.slotId, "pm")}
                               disabled={readOnly || completed}
-                              aria-label={`PM meal allowance for ${r.staffName || "shift"}`}
+                              label={`PM meal allowance for ${r.staffName || "shift"}`}
                             />
                           </td>
                           <td className="text-center px-2 py-1.5">
@@ -593,6 +595,40 @@ export function HrEditor({
 /** Small dropdown-picker for adding an OT row — kept out of the main
  *  component for readability. Renders as a native <select> whose choice
  *  event fires `onAdd`, then resets. */
+/** Compact desktop toggle used in place of a native checkbox inside
+ *  the meal-allowance table. Explicit <button>, so no browser-level
+ *  quirks around <input type="checkbox"> click swallowing or dark-theme
+ *  rendering. Filled emerald when on, plain outline when off. */
+function ToggleBox({
+  on,
+  onClick,
+  disabled,
+  label,
+}: {
+  on: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={on}
+      aria-label={label}
+      title={label}
+      className={`inline-flex items-center justify-center h-6 w-6 rounded border text-xs font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+        on
+          ? "bg-emerald-500 border-emerald-600 text-white"
+          : "border-input hover:bg-secondary"
+      }`}
+    >
+      {on ? "✓" : ""}
+    </button>
+  );
+}
+
 /** Touch-friendly toggle chip for the mobile meal-allowance card
  *  view. Bigger tap target than a native checkbox and reads state at
  *  a glance from colour. */
