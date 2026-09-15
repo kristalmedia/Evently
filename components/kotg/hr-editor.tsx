@@ -57,12 +57,31 @@ function mealForTick(t: { am: boolean; pm: boolean }): number {
   return (t.am ? 5 : 0) + (t.pm ? 5 : 0);
 }
 
-/** Does this shift's time range cover both halves of the day? Used as
- *  a UI hint on the mobile view — the "Full day" chip gets a star so
- *  HR knows the shift itself already spans AM+PM. Purely visual; the
- *  ticks stay independent. Midnight cutoff at 12:00. */
+/** Auto-classify a roster shift into AM / PM / Full-day based purely on
+ *  its start and end times. Cutoff at 12:00.
+ *
+ *    ends at/before 12:00 (e.g. 08:00–12:00)  → AM  only
+ *    starts at/after 12:00 (e.g. 13:00–22:00) → PM  only
+ *    spans 12:00          (e.g. 09:00–22:00) → both (full day)
+ *
+ *  Used as the default meal-allowance tick for any slot HR hasn't
+ *  explicitly touched — so ticks pre-populate to what the shift's own
+ *  times imply. HR can still override by clicking any tick. */
+export function classifyShift(start: string, end: string): { am: boolean; pm: boolean } {
+  const s = (start ?? "").trim();
+  const e = (end ?? "").trim();
+  if (!s || !e) return { am: false, pm: false };
+  const startsBefore12 = s.localeCompare("12:00") < 0;
+  const endsAfter12 = e.localeCompare("12:00") > 0;
+  return { am: startsBefore12, pm: endsAfter12 };
+}
+
+/** Convenience wrapper — was the shift's time range naturally a full
+ *  day (spans both halves)? Used for the mobile ★ hint on the
+ *  "Full day" chip. */
 function isFullDayShift(start: string, end: string): boolean {
-  return (start ?? "").localeCompare("12:00") < 0 && (end ?? "").localeCompare("12:00") > 0;
+  const c = classifyShift(start, end);
+  return c.am && c.pm;
 }
 
 /**
@@ -109,7 +128,20 @@ export function HrEditor({
   };
 }) {
   const router = useRouter();
-  const [ticks, setTicks] = useState<MealTickMap>(initialMealTicks);
+  // Seed the ticks state with a time-based auto-classification for
+  // any roster slot HR hasn't explicitly ticked yet. That way a fresh
+  // HR editor opens with sensible defaults derived from the shift
+  // times (09:00–12:00 → AM, 13:00–22:00 → PM, 09:00–22:00 → both)
+  // rather than everything empty. HR can still override any tick.
+  const [ticks, setTicks] = useState<MealTickMap>(() => {
+    const seeded: MealTickMap = { ...initialMealTicks };
+    for (const r of roster) {
+      if (!(r.slotId in seeded)) {
+        seeded[r.slotId] = classifyShift(r.start, r.end);
+      }
+    }
+    return seeded;
+  });
   const [overtime, setOvertime] = useState<OvertimeLine[]>(initialOvertime);
   const [busy, setBusy] = useState(false);
   const { users } = useDirectoryUsers();
@@ -348,8 +380,14 @@ export function HrEditor({
             table on tablet/desktop, so HR can tick from a phone at
             venue without horizontal-scrolling a table. */}
         <div className="space-y-2">
-          <div className="callsign inline-flex items-center gap-1.5">
-            <Coffee className="h-3 w-3" /> Meal allowance — tick per shift
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <div className="callsign inline-flex items-center gap-1.5">
+              <Coffee className="h-3 w-3" /> Meal allowance — tick per shift
+            </div>
+            <div className="text-[0.68rem] text-muted-foreground">
+              Auto-ticked from shift times · ends by 12:00 = AM, starts at 12:00
+              or later = PM, spans 12:00 = full day. Click any tick to override.
+            </div>
           </div>
           {roster.length === 0 ? (
             <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
@@ -507,45 +545,61 @@ export function HrEditor({
           ) : (
             <div className="space-y-2">
               {overtime.map((l) => (
-                <div
-                  key={l.id}
-                  className="grid gap-2 grid-cols-1 sm:grid-cols-[10rem_1fr_8rem_auto] items-center rounded-md border p-2"
-                >
-                  <div className="text-sm">
-                    <div className="font-medium">{l.staffName}</div>
-                    <div className="text-[0.65rem] text-muted-foreground font-mono uppercase">
-                      {l.staffDept}
+                <div key={l.id} className="rounded-md border p-2 space-y-2">
+                  {/* Top row: staff identity on the left, amount + trash
+                      on the right so the whole action stays reachable at
+                      once glance on both phone and desktop. */}
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium truncate">
+                        {l.staffName}
+                      </div>
+                      <div className="text-[0.65rem] text-muted-foreground font-mono uppercase">
+                        {l.staffDept}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="relative">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[0.65rem] font-mono text-muted-foreground pointer-events-none">
+                          BND
+                        </span>
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          placeholder="0.00"
+                          value={Number.isFinite(l.amountBND) ? l.amountBND : 0}
+                          onChange={(e) =>
+                            updateOtRow(l.id, {
+                              amountBND: Number.parseFloat(e.target.value) || 0,
+                            })
+                          }
+                          disabled={readOnly || completed}
+                          className="w-28 pl-10 text-right font-mono"
+                          aria-label={`Overtime amount for ${l.staffName}`}
+                        />
+                      </div>
+                      {!readOnly && !completed && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeOtRow(l.id)}
+                          aria-label={`Remove overtime row for ${l.staffName}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                        </Button>
+                      )}
                     </div>
                   </div>
+                  {/* Notes on its own row so it can breathe on mobile
+                      and hold multi-word context. */}
                   <Input
                     placeholder="Notes (shift, reason)"
                     value={l.notes ?? ""}
                     onChange={(e) => updateOtRow(l.id, { notes: e.target.value })}
                     disabled={readOnly || completed}
+                    className="text-sm"
                   />
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="Amount"
-                    value={Number.isFinite(l.amountBND) ? l.amountBND : 0}
-                    onChange={(e) =>
-                      updateOtRow(l.id, {
-                        amountBND: Number.parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    disabled={readOnly || completed}
-                  />
-                  {!readOnly && !completed && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeOtRow(l.id)}
-                      aria-label="Remove overtime row"
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-rose-500" />
-                    </Button>
-                  )}
                 </div>
               ))}
             </div>
