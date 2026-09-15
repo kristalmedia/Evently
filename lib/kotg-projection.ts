@@ -171,12 +171,15 @@ export function sumShadowBudget(shadow: ShadowEventRecord | null | undefined): {
       totalActBND: 0,
     };
   }
-  let overtimeBND = 0;
-  let mealAllowanceBND = 0;
-  for (const line of shadow.hr.lines) {
-    if (line.kind === "OVERTIME") overtimeBND += line.amountBND;
-    else if (line.kind === "MEAL_ALLOWANCE") mealAllowanceBND += line.amountBND;
-  }
+  // OT: HR-typed per row.
+  const overtimeBND = shadow.hr.overtime.reduce((s, l) => s + l.amountBND, 0);
+  // Meal allowance: BND 5 per AM tick + BND 5 per PM tick. Iterating
+  // the tick map (not the slot list) — the HR editor is the sole author
+  // of tick keys, and it never leaves ticks for a deleted slot.
+  const mealAllowanceBND = Object.values(shadow.hr.mealTicks).reduce(
+    (s, t) => s + (t.am ? 5 : 0) + (t.pm ? 5 : 0),
+    0,
+  );
   let otherEstBND = 0;
   let otherActBND = 0;
   for (const line of shadow.finance.lines) {

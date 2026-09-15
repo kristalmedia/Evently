@@ -36,15 +36,34 @@ export type ShadowEventKemsStatus =
   /** All parties done. Event is fully published to everyone. */
   | "PUBLISHED";
 
-/** HR-owned financial line — the pivot moved OT + meal allowance out of
- *  Putri's Financial section and into HR's own bucket. */
-export interface HrFinancialLine {
+/** Overtime row — one per shift HR wants to compensate. Restricted to
+ *  IT and Technical staff (business rule). staffName + staffDept are
+ *  captured at edit time so a later user rename / dept change doesn't
+ *  retroactively rewrite the receipt. */
+export interface OvertimeLine {
   id: string;
-  kind: "OVERTIME" | "MEAL_ALLOWANCE";
-  item: string;
+  /** User.id from the directory; may be blank for a legacy free-text
+   *  entry, in which case staffName is the display value. */
+  staffUserId: string;
+  staffName: string;
+  /** Must be "IT" or "Technical" — validated server-side too. */
+  staffDept: string;
   amountBND: number;
   notes?: string;
+  /** Optional: the roster slot that motivates the OT. Not required —
+   *  HR may know from context; leaving it null keeps the OT row valid. */
+  slotId?: string;
 }
+
+/** Per-slot meal-allowance ticks. HR flips AM / PM per roster shift;
+ *  each flag is worth BND 5, so a both-halves shift = BND 10.
+ *
+ *  Stored as a keyed record rather than embedded on the RosterSlot so:
+ *   - HR's tick pass is isolated from the Manager's roster edit,
+ *   - a slot's deletion doesn't accidentally take a tick with it (the
+ *     stale entries are harmless and get GC'd by mealAllowanceTotal
+ *     since sums iterate the current slot list). */
+export type MealTickMap = Record<string, { am: boolean; pm: boolean }>;
 
 /** Non-HR financial line owned by the Finance Lead (Putri). Kept as a
  *  simple flat list rather than reusing lib/types.ts CostGroup so the
@@ -94,12 +113,18 @@ export interface ShadowEventRecord {
   /** Per-department roster records. A key missing here means "not yet
    *  started" — treated the same as `completed: false` with empty slots. */
   rosterByDept: Partial<Record<ShadowDeptKey, DeptRoster>>;
-  /** HR-owned block: OT + meal-allowance lines, plus completion flag. */
+  /** HR-owned block after the meal-tick / OT-rules rework:
+   *
+   *   - `mealTicks` — HR's per-slot AM/PM checkboxes. The meal-allowance
+   *     total is derived, not stored: BND 5 per ticked half.
+   *   - `overtime` — HR-added OT rows for IT/Technical shifts only. Amount
+   *     is HR-typed (not auto-computed) since OT rate varies by seniority. */
   hr: {
     completed: boolean;
     completedAt?: string;
     completedByUserId?: string;
-    lines: HrFinancialLine[];
+    mealTicks: MealTickMap;
+    overtime: OvertimeLine[];
   };
   /** Finance Lead-owned block: remaining Financial (equipment / prod /
    *  marketing), plus completion flag. */

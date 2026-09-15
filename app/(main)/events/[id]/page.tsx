@@ -19,6 +19,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { OnAirPill } from "@/components/shared/broadcast-marks";
 import { requireSession } from "@/lib/auth";
 import { canViewBudget } from "@/lib/permissions";
+import { getAllUsers } from "@/lib/store";
 import {
   canEditDept,
   canEditFinance,
@@ -41,7 +42,7 @@ import {
 import type { ShadowEventKemsStatus } from "@/lib/shadow-events-types";
 import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
 import { DeptRosterEditor } from "@/components/kotg/dept-roster-editor";
-import { HrEditor } from "@/components/kotg/hr-editor";
+import { HrEditor, type FlatRosterRow } from "@/components/kotg/hr-editor";
 import { FinanceEditor } from "@/components/kotg/finance-editor";
 import { formatBND, formatDateTime } from "@/lib/utils";
 
@@ -89,6 +90,39 @@ export default async function EventDetailPage({
   const showBudget = canViewBudget(user);
   const budget = sumShadowBudget(shadow);
   const status = mapKotgBookingToEventStatus(kotg.booking.Status, shadow.kemsStatus);
+
+  // Flat cross-dept roster for the HR editor — every slot from every
+  // dept, with the staff user resolved server-side so the client can
+  // filter for OT eligibility (dept must be IT/Technical) without a
+  // second round-trip. Rows with no resolved user still appear (name
+  // shown as em-dash) so HR can see the shift exists.
+  const allUsers = getAllUsers();
+  const usersById = new Map(allUsers.map((u) => [u.id, u]));
+  const flatRoster: FlatRosterRow[] = [];
+  for (const deptKey of MANAGER_DEPT_KEYS) {
+    const block = shadow.rosterByDept[deptKey];
+    if (!block) continue;
+    for (const slot of block.slots) {
+      const staff = slot.staffUserId ? usersById.get(slot.staffUserId) : undefined;
+      flatRoster.push({
+        slotId: slot.id,
+        deptKey,
+        deptLabel: DEPT_LABEL[deptKey] ?? deptKey,
+        staffUserId: slot.staffUserId ?? "",
+        staffName: staff?.fullName ?? (slot.staffUserId || ""),
+        staffDept: staff?.department ?? "",
+        date: slot.date,
+        start: slot.start,
+        end: slot.end,
+      });
+    }
+  }
+  // Sort by date then start time — HR reads chronologically.
+  flatRoster.sort((a, b) => {
+    const d = a.date.localeCompare(b.date);
+    if (d !== 0) return d;
+    return a.start.localeCompare(b.start);
+  });
 
   return (
     <div className="space-y-8">
@@ -318,7 +352,14 @@ export default async function EventDetailPage({
         canViewBudget(user) && (
           <HrEditor
             bookingId={bookingId}
-            initial={shadow.hr.lines}
+            bundleInfo={{
+              displayTitle: kotgDisplayTitle(kotg),
+              clientName: kotgOrganizerLabel(kotg),
+              venue: kotg.booking.LocationDetails || "TBC",
+            }}
+            roster={flatRoster}
+            initialMealTicks={shadow.hr.mealTicks}
+            initialOvertime={shadow.hr.overtime}
             completed={shadow.hr.completed}
             readOnly={!canEditHr(user, shadow.kemsStatus)}
           />

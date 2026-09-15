@@ -47,7 +47,7 @@ function emptyRecord(bookingId: string): ShadowEventRecord {
     bookingId,
     kemsStatus: "ACTIVE",
     rosterByDept: {},
-    hr: { completed: false, lines: [] },
+    hr: { completed: false, mealTicks: {}, overtime: [] },
     finance: { completed: false, lines: [] },
     programFlow: [],
     createdAt: now,
