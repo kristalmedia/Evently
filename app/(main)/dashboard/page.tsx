@@ -19,7 +19,11 @@ import { requireSession } from "@/lib/auth";
 import { can, canViewBudget } from "@/lib/permissions";
 import { getKotgBookingsWithClients } from "@/lib/google-sheets";
 import { reconcileKotgBookings } from "@/lib/kotg-sync";
-import { projectKotgBookingRow, sumShadowBudget } from "@/lib/kotg-projection";
+import {
+  filterVisibleBookings,
+  projectKotgBookingRow,
+  sumShadowBudget,
+} from "@/lib/kotg-projection";
 import { getShadowEvent } from "@/lib/shadow-events";
 import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
 import { formatBND } from "@/lib/utils";
@@ -30,8 +34,12 @@ export default async function DashboardPage() {
   // detected here fire the all-hands notification once (idempotent).
   let bookings: KotgBookingWithClient[];
   try {
-    bookings = await getKotgBookingsWithClients();
-    reconcileKotgBookings(bookings);
+    const raw = await getKotgBookingsWithClients();
+    reconcileKotgBookings(raw);
+    // Reconcile against the raw list (so an Active→Cancelled Sheet
+    // transition still purges the shadow record), then hide Cancelled
+    // from the dashboard so no viewer sees them here.
+    bookings = filterVisibleBookings(raw);
   } catch {
     // Sheet outage — degrade to an empty dashboard rather than 500'ing.
     // The KOTG bookings page shows the actual error to Sales users who

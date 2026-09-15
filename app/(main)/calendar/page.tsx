@@ -3,7 +3,10 @@ import { EventsCalendar } from "@/components/events/events-calendar";
 import { requireSession } from "@/lib/auth";
 import { getKotgBookingsWithClients } from "@/lib/google-sheets";
 import { reconcileKotgBookings } from "@/lib/kotg-sync";
-import { projectKotgCalendarItem } from "@/lib/kotg-projection";
+import {
+  filterVisibleBookings,
+  projectKotgCalendarItem,
+} from "@/lib/kotg-projection";
 import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
 
 export default async function CalendarPage() {
@@ -13,8 +16,9 @@ export default async function CalendarPage() {
   // detects Active-status transitions and fires the fan-out once.
   let bookings: KotgBookingWithClient[];
   try {
-    bookings = await getKotgBookingsWithClients();
-    reconcileKotgBookings(bookings);
+    const raw = await getKotgBookingsWithClients();
+    reconcileKotgBookings(raw);
+    bookings = filterVisibleBookings(raw);
   } catch {
     bookings = [];
   }

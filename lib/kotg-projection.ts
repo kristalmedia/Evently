@@ -14,6 +14,27 @@ import { getShadowEvent } from "./shadow-events";
  * data-plumbing change; no UI component needs to know the origin.
  */
 
+/** Sheet-Status values that should never surface to non-Sales KEMS
+ *  users. Cancelled bookings remain in the Sheet (Sales keeps them for
+ *  audit) but every list — dashboard, calendar, events, reports, event
+ *  detail — filters them out via `filterVisibleBookings`. Matched
+ *  case-insensitively + trimmed. */
+const HIDDEN_SHEET_STATUSES = new Set(["cancelled", "canceled"]);
+
+/** Predicate: is this Sheet-Status value one KEMS should surface? */
+export function isVisibleBookingStatus(sheetStatus: string): boolean {
+  return !HIDDEN_SHEET_STATUSES.has(sheetStatus.trim().toLowerCase());
+}
+
+/** Convenience: drop every booking whose Sheet Status is Cancelled.
+ *  Every KEMS list page should route the raw fetch through this before
+ *  handing rows to the UI. */
+export function filterVisibleBookings(
+  bookings: KotgBookingWithClient[],
+): KotgBookingWithClient[] {
+  return bookings.filter((b) => isVisibleBookingStatus(b.booking.Status));
+}
+
 /** Derives the UI EventStatus from the pair (Sheet booking status, KEMS
  *  shadow.kemsStatus). Called for every row every render, so kept as a
  *  pure lookup with no side effects.

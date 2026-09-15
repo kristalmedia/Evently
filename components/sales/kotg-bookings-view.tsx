@@ -18,13 +18,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { EmptyState } from "@/components/shared/empty-state";
+import { isVisibleBookingStatus } from "@/lib/kotg-projection";
 import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
-
-/** Sheet-Status values that should be hidden from the KOTG bookings
- *  view. Cancelled bookings still exist in the Sheet (Sales keeps them
- *  for audit) but Kristal Operations shouldn't see them mixed in with
- *  live work. Matched case-insensitively + trimmed. */
-const HIDDEN_SHEET_STATUSES = new Set(["cancelled", "canceled"]);
 
 /** Whether this viewer is allowed to see the Contact column. Kept
  *  narrow per the spec: Sales dept + Super Admin only — even CCM Admins
@@ -56,13 +51,13 @@ export function KotgBookingsView({
 
   const showContact = canViewContact(viewerDepartment, viewerIsSuperAdmin);
 
-  // Bookings passed through the hidden-status filter once, at the top of
-  // every render — every downstream count/list works from `visible`.
+  // Bookings passed through the shared visibility filter once, at the
+  // top of every render — every downstream count/list works from
+  // `visible`. Same rule as every other Sheet-consuming page (see
+  // lib/kotg-projection.ts) so Sales + Operations agree on what
+  // "active" means.
   const visible = useMemo(
-    () =>
-      bookings.filter(
-        (b) => !HIDDEN_SHEET_STATUSES.has(b.booking.Status.trim().toLowerCase()),
-      ),
+    () => bookings.filter((b) => isVisibleBookingStatus(b.booking.Status)),
     [bookings],
   );
 
@@ -78,7 +73,7 @@ export function KotgBookingsView({
       setLastFetchedAt(data.fetchedAt);
       setError(null);
       const visibleCount = (data.bookings as KotgBookingWithClient[]).filter(
-        (b) => !HIDDEN_SHEET_STATUSES.has(b.booking.Status.trim().toLowerCase()),
+        (b) => isVisibleBookingStatus(b.booking.Status),
       ).length;
       toast.success(`Refreshed — ${visibleCount} active bookings`, {
         position: "bottom-center",

@@ -110,7 +110,11 @@ export function EventsTable({ rows }: { rows: EventListRow[] }) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All statuses</SelectItem>
-            {EVENT_STATUSES.map((s) => (
+            {/* Cancelled bookings are filtered upstream — hiding the
+                filter option too so nobody wonders where their filter
+                choice went. Legacy statuses left in the taxonomy (see
+                lib/constants.ts) still render for other consumers. */}
+            {EVENT_STATUSES.filter((s) => s.value !== "CANCELLED").map((s) => (
               <SelectItem key={s.value} value={s.value}>
                 {s.label}
               </SelectItem>

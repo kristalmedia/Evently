@@ -29,6 +29,8 @@ import {
 import { getKotgBookingsWithClients } from "@/lib/google-sheets";
 import { reconcileKotgBookings } from "@/lib/kotg-sync";
 import {
+  filterVisibleBookings,
+  isVisibleBookingStatus,
   kotgDisplayTitle,
   kotgOrganizerLabel,
   mapKotgBookingToEventStatus,
@@ -75,15 +77,19 @@ export default async function EventDetailPage({
   // KOTG bookings feed. Missing → notFound.
   let bookings: KotgBookingWithClient[];
   try {
-    bookings = await getKotgBookingsWithClients();
-    reconcileKotgBookings(bookings);
+    const raw = await getKotgBookingsWithClients();
+    reconcileKotgBookings(raw);
+    bookings = filterVisibleBookings(raw);
   } catch {
     // A Sheet outage shouldn't 500 an event detail page — degrade to
     // notFound so the router shows the standard 404 rather than throwing.
     bookings = [];
   }
   const kotg = bookings.find((b) => b.booking.BookingID === bookingId);
-  if (!kotg) notFound();
+  // notFound both when the booking id is unknown AND when a cancelled
+  // booking is targeted directly by URL — cancelled bookings shouldn't
+  // be reachable through /events/[id] either.
+  if (!kotg || !isVisibleBookingStatus(kotg.booking.Status)) notFound();
 
   const shadow = getOrCreateShadowEvent(bookingId);
   const row = projectKotgBookingRow(kotg);

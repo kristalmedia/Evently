@@ -5,7 +5,10 @@ import { EventsTable } from "@/components/events/events-table";
 import { requireSession } from "@/lib/auth";
 import { getKotgBookingsWithClients } from "@/lib/google-sheets";
 import { reconcileKotgBookings } from "@/lib/kotg-sync";
-import { projectKotgBookingRow } from "@/lib/kotg-projection";
+import {
+  filterVisibleBookings,
+  projectKotgBookingRow,
+} from "@/lib/kotg-projection";
 import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
 
 export default async function EventsPage() {
@@ -16,8 +19,9 @@ export default async function EventsPage() {
   // table consumes unchanged.
   let bookings: KotgBookingWithClient[];
   try {
-    bookings = await getKotgBookingsWithClients();
-    reconcileKotgBookings(bookings);
+    const raw = await getKotgBookingsWithClients();
+    reconcileKotgBookings(raw);
+    bookings = filterVisibleBookings(raw);
   } catch {
     bookings = [];
   }

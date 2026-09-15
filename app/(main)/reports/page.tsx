@@ -7,6 +7,7 @@ import { getAuditEntries } from "@/lib/store";
 import { getKotgBookingsWithClients } from "@/lib/google-sheets";
 import { reconcileKotgBookings } from "@/lib/kotg-sync";
 import {
+  filterVisibleBookings,
   inferKotgCategory,
   kotgDisplayTitle,
   mapKotgBookingToEventStatus,
@@ -24,8 +25,9 @@ export default async function ReportsPage() {
   const showBudget = canViewBudget(user);
   let bookings: KotgBookingWithClient[];
   try {
-    bookings = await getKotgBookingsWithClients();
-    reconcileKotgBookings(bookings);
+    const raw = await getKotgBookingsWithClients();
+    reconcileKotgBookings(raw);
+    bookings = filterVisibleBookings(raw);
   } catch {
     bookings = [];
   }
