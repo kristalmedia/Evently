@@ -1,8 +1,8 @@
 import Link from "next/link";
 import {
   CalendarClock,
-  CalendarPlus,
   ChevronRight,
+  ClipboardList,
   DollarSign,
   ListChecks,
   Radio,
@@ -17,29 +17,44 @@ import { OnAirPill, Callsign } from "@/components/shared/broadcast-marks";
 import { EmptyState } from "@/components/shared/empty-state";
 import { requireSession } from "@/lib/auth";
 import { can, canViewBudget } from "@/lib/permissions";
-import { calculateStaffing } from "@/lib/roster-calc";
-import { getAllEvents, getEventRows } from "@/lib/store";
-import { formatBND, formatDate } from "@/lib/utils";
+import { getKotgBookingsWithClients } from "@/lib/google-sheets";
+import { reconcileKotgBookings } from "@/lib/kotg-sync";
+import { projectKotgBookingRow, sumShadowBudget } from "@/lib/kotg-projection";
+import { getShadowEvent } from "@/lib/shadow-events";
+import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
+import { formatBND } from "@/lib/utils";
 
 export default async function DashboardPage() {
   const { user } = await requireSession();
-  const rows = getEventRows();
+  // Source of truth: Sales team's Google Sheet. Any transitions to Active
+  // detected here fire the all-hands notification once (idempotent).
+  let bookings: KotgBookingWithClient[];
+  try {
+    bookings = await getKotgBookingsWithClients();
+    reconcileKotgBookings(bookings);
+  } catch {
+    // Sheet outage — degrade to an empty dashboard rather than 500'ing.
+    // The KOTG bookings page shows the actual error to Sales users who
+    // are the ones equipped to notice/fix a broken service account.
+    bookings = [];
+  }
+  const rows = bookings.map(projectKotgBookingRow);
   const showBudget = canViewBudget(user);
 
-  // Budget rollup (only computed if user can see it)
-  const events = showBudget ? getAllEvents() : [];
-  const budget = events.reduce(
-    (acc, e) => {
-      const staffing = calculateStaffing(e.s5.staff ?? []);
-      const manual = e.s6.costs.reduce((s, c) => s + c.estimatedBND, 0);
-      const total = manual + staffing.overtimeBND + staffing.mealAllowanceBND;
-      acc.totalEst += total;
-      acc.overtime += staffing.overtimeBND;
-      acc.meals += staffing.mealAllowanceBND;
-      return acc;
-    },
-    { totalEst: 0, overtime: 0, meals: 0 }
-  );
+  // Budget rollup — sums HR OT/meal + Finance-owned other-cost lines from
+  // the shadow records. Only computed for authorised viewers.
+  const budget = showBudget
+    ? bookings.reduce(
+        (acc, b) => {
+          const sums = sumShadowBudget(getShadowEvent(b.booking.BookingID));
+          acc.totalEst += sums.totalEstBND;
+          acc.overtime += sums.overtimeBND;
+          acc.meals += sums.mealAllowanceBND;
+          return acc;
+        },
+        { totalEst: 0, overtime: 0, meals: 0 },
+      )
+    : { totalEst: 0, overtime: 0, meals: 0 };
 
   const counts = {
     total: rows.length,
@@ -62,13 +77,13 @@ export default async function DashboardPage() {
       <PageHeader
         eyebrow={`Signed in as ${user.department}`}
         title={`Welcome back, ${user.fullName.split(" ")[0]}.`}
-        description="Here's what's on the schedule."
+        description="Here's what's on the schedule — sourced live from the Sales team's bookings sheet."
         actions={
           canCreate && (
             <Button asChild variant="accent" className="gap-2">
-              <Link href="/events/new">
-                <CalendarPlus className="h-4 w-4" />
-                Create event
+              <Link href="/sales/kotg-bookings">
+                <ClipboardList className="h-4 w-4" />
+                KOTG bookings
               </Link>
             </Button>
           )
@@ -91,7 +106,7 @@ export default async function DashboardPage() {
                 <div className="text-2xl font-mono font-semibold text-accent">
                   {formatBND(budget.totalEst)}
                 </div>
-                <div className="text-xs text-muted-foreground">Across {events.length} events</div>
+                <div className="text-xs text-muted-foreground">Across {bookings.length} bookings</div>
               </div>
               <div className="space-y-1">
                 <div className="callsign">Overtime</div>
@@ -196,12 +211,12 @@ export default async function DashboardPage() {
               <EmptyState
                 icon={CalendarClock}
                 title="Nothing scheduled"
-                description="Create a new event to see it here."
+                description="No upcoming KOTG bookings from the Sales sheet."
                 action={
                   canCreate && (
                     <Button asChild variant="accent" size="sm" className="gap-2">
-                      <Link href="/events/new">
-                        <CalendarPlus className="h-4 w-4" /> New event
+                      <Link href="/sales/kotg-bookings">
+                        <ClipboardList className="h-4 w-4" /> View KOTG bookings
                       </Link>
                     </Button>
                   )
@@ -251,10 +266,10 @@ export default async function DashboardPage() {
           <CardContent className="space-y-2">
             {canCreate && (
               <QuickAction
-                href="/events/new"
-                icon={CalendarPlus}
-                title="Create event"
-                subtitle="Start a new concept brief"
+                href="/sales/kotg-bookings"
+                icon={ClipboardList}
+                title="KOTG bookings"
+                subtitle="Live from the Sales sheet"
               />
             )}
             <QuickAction
@@ -266,8 +281,8 @@ export default async function DashboardPage() {
             <QuickAction
               href="/events"
               icon={ListChecks}
-              title="Manage events"
-              subtitle="Filter, sort, edit"
+              title="All events"
+              subtitle="Filter, sort, search"
             />
           </CardContent>
         </Card>
