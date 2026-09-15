@@ -4,6 +4,7 @@ import { KotgBookingsView } from "@/components/sales/kotg-bookings-view";
 import { requireSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { getKotgBookingsWithClients } from "@/lib/google-sheets";
+import { reconcileKotgBookings } from "@/lib/kotg-sync";
 import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
 
 export default async function KotgBookingsPage() {
@@ -17,6 +18,12 @@ export default async function KotgBookingsPage() {
   let initialError: string | null = null;
   try {
     initialBookings = await getKotgBookingsWithClients();
+    // Detect fresh Active-status transitions on every visit — see
+    // lib/kotg-sync.ts for the on-visit polling rationale. Runs before the
+    // page paints so the notification fan-out for a just-flipped booking
+    // fires as early as possible, but is idempotent (shadow.activeNotifiedAt
+    // flag) so repeated visits don't spam.
+    reconcileKotgBookings(initialBookings);
   } catch (err) {
     initialBookings = [];
     initialError = (err as Error).message;

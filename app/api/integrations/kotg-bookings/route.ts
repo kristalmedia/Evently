@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { getKotgBookingsWithClients } from "@/lib/google-sheets";
+import { reconcileKotgBookings } from "@/lib/kotg-sync";
 
 /**
  * GET — KOTG service bookings from the Sales team's Google Sheet, joined
@@ -23,6 +24,10 @@ export async function GET(req: Request) {
 
   try {
     const bookings = await getKotgBookingsWithClients({ forceRefresh });
+    // Same on-visit reconciliation as the page-level fetch — see
+    // lib/kotg-sync.ts. Refresh clicks are a valid transition-detection
+    // trigger too, so we run it here too (idempotent via shadow flag).
+    reconcileKotgBookings(bookings);
     return NextResponse.json({ bookings, fetchedAt: new Date().toISOString() });
   } catch (err) {
     return NextResponse.json(
