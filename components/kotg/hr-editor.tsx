@@ -56,6 +56,14 @@ function mealForTick(t: { am: boolean; pm: boolean }): number {
   return (t.am ? 5 : 0) + (t.pm ? 5 : 0);
 }
 
+/** Does this shift's time range cover both halves of the day? Used as
+ *  a UI hint on the mobile view — the "Full day" chip gets a star so
+ *  HR knows the shift itself already spans AM+PM. Purely visual; the
+ *  ticks stay independent. Midnight cutoff at 12:00. */
+function isFullDayShift(start: string, end: string): boolean {
+  return (start ?? "").localeCompare("12:00") < 0 && (end ?? "").localeCompare("12:00") > 0;
+}
+
 /**
  * HR block editor — rewritten post-pivot:
  *   • Meal allowance is derived from a per-slot AM/PM tick grid at
@@ -115,6 +123,19 @@ export function HrEditor({
         [slotId]: { ...cur, [half]: !cur[half] },
       };
       return next;
+    });
+  }
+
+  /** Toggle both halves at once. If either half is off, turn both on;
+   *  if both are on, turn both off. Convenient for full-day shifts. */
+  function toggleBoth(slotId: string) {
+    setTicks((prev) => {
+      const cur = prev[slotId] ?? { am: false, pm: false };
+      const bothOn = cur.am && cur.pm;
+      return {
+        ...prev,
+        [slotId]: { am: !bothOn, pm: !bothOn },
+      };
     });
   }
 
@@ -273,7 +294,10 @@ export function HrEditor({
           </Button>
         </div>
 
-        {/* Meal allowance grid — one row per roster slot across every dept */}
+        {/* Meal allowance grid — one row per roster slot across every
+            dept. Renders as a card list on mobile (< sm) and a compact
+            table on tablet/desktop, so HR can tick from a phone at
+            venue without horizontal-scrolling a table. */}
         <div className="space-y-2">
           <div className="callsign inline-flex items-center gap-1.5">
             <Coffee className="h-3 w-3" /> Meal allowance — tick per shift
@@ -284,60 +308,133 @@ export function HrEditor({
               blocks. HR ticks appear here once shifts are entered.
             </div>
           ) : (
-            <div className="rounded-md border overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 text-xs">
-                  <tr>
-                    <th className="text-left px-2 py-1.5">Dept</th>
-                    <th className="text-left px-2 py-1.5">Staff</th>
-                    <th className="text-left px-2 py-1.5">Date</th>
-                    <th className="text-left px-2 py-1.5">Shift</th>
-                    <th className="text-center px-2 py-1.5">AM</th>
-                    <th className="text-center px-2 py-1.5">PM</th>
-                    <th className="text-right px-2 py-1.5">Amount</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {roster.map((r) => {
-                    const t = ticks[r.slotId] ?? { am: false, pm: false };
-                    const amt = mealForTick(t);
-                    return (
-                      <tr key={r.slotId} className="border-t">
-                        <td className="px-2 py-1.5 text-muted-foreground">{r.deptLabel}</td>
-                        <td className="px-2 py-1.5">{r.staffName || "—"}</td>
-                        <td className="px-2 py-1.5 font-mono text-xs">{r.date}</td>
-                        <td className="px-2 py-1.5 font-mono text-xs text-muted-foreground">
-                          {r.start}–{r.end}
-                        </td>
-                        <td className="text-center px-2 py-1.5">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4"
-                            checked={t.am}
-                            onChange={() => toggleTick(r.slotId, "am")}
-                            disabled={readOnly || completed}
-                            aria-label={`AM meal allowance for ${r.staffName || "shift"}`}
-                          />
-                        </td>
-                        <td className="text-center px-2 py-1.5">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4"
-                            checked={t.pm}
-                            onChange={() => toggleTick(r.slotId, "pm")}
-                            disabled={readOnly || completed}
-                            aria-label={`PM meal allowance for ${r.staffName || "shift"}`}
-                          />
-                        </td>
-                        <td className="text-right px-2 py-1.5 font-mono">
+            <>
+              {/* Desktop / tablet: real table for density */}
+              <div className="hidden sm:block rounded-md border overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/40 text-xs">
+                    <tr>
+                      <th className="text-left px-2 py-1.5">Dept</th>
+                      <th className="text-left px-2 py-1.5">Staff</th>
+                      <th className="text-left px-2 py-1.5">Date</th>
+                      <th className="text-left px-2 py-1.5">Shift</th>
+                      <th className="text-center px-2 py-1.5">AM</th>
+                      <th className="text-center px-2 py-1.5">PM</th>
+                      <th className="text-center px-2 py-1.5">Both</th>
+                      <th className="text-right px-2 py-1.5">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {roster.map((r) => {
+                      const t = ticks[r.slotId] ?? { am: false, pm: false };
+                      const amt = mealForTick(t);
+                      const both = t.am && t.pm;
+                      return (
+                        <tr key={r.slotId} className="border-t">
+                          <td className="px-2 py-1.5 text-muted-foreground">{r.deptLabel}</td>
+                          <td className="px-2 py-1.5">{r.staffName || "—"}</td>
+                          <td className="px-2 py-1.5 font-mono text-xs">{r.date}</td>
+                          <td className="px-2 py-1.5 font-mono text-xs text-muted-foreground">
+                            {r.start}–{r.end}
+                          </td>
+                          <td className="text-center px-2 py-1.5">
+                            <input
+                              type="checkbox"
+                              className="h-5 w-5 cursor-pointer"
+                              checked={t.am}
+                              onChange={() => toggleTick(r.slotId, "am")}
+                              disabled={readOnly || completed}
+                              aria-label={`AM meal allowance for ${r.staffName || "shift"}`}
+                            />
+                          </td>
+                          <td className="text-center px-2 py-1.5">
+                            <input
+                              type="checkbox"
+                              className="h-5 w-5 cursor-pointer"
+                              checked={t.pm}
+                              onChange={() => toggleTick(r.slotId, "pm")}
+                              disabled={readOnly || completed}
+                              aria-label={`PM meal allowance for ${r.staffName || "shift"}`}
+                            />
+                          </td>
+                          <td className="text-center px-2 py-1.5">
+                            {/* Quick-toggle for full-day shifts. Ticks
+                                or clears both halves in one click. */}
+                            <button
+                              type="button"
+                              onClick={() => toggleBoth(r.slotId)}
+                              disabled={readOnly || completed}
+                              className={`rounded-md border px-2 py-0.5 text-[0.65rem] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                                both
+                                  ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-400"
+                                  : "border-input hover:bg-secondary"
+                              }`}
+                              aria-label={`Toggle full-day meal allowance for ${r.staffName || "shift"}`}
+                              title="Tick or clear both AM + PM"
+                            >
+                              {both ? "✓ full day" : "full day"}
+                            </button>
+                          </td>
+                          <td className="text-right px-2 py-1.5 font-mono">
+                            {amt > 0 ? formatBND(amt) : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile: stacked cards, one per shift, with big
+                  touch-friendly toggle chips instead of tiny checkboxes.
+                  A shift that already covers both halves in the source
+                  time range (e.g. 08:00–17:00) shows the "Full day"
+                  chip pre-highlighted as a hint. */}
+              <div className="sm:hidden space-y-2">
+                {roster.map((r) => {
+                  const t = ticks[r.slotId] ?? { am: false, pm: false };
+                  const amt = mealForTick(t);
+                  const spansBoth = isFullDayShift(r.start, r.end);
+                  return (
+                    <div key={r.slotId} className="rounded-md border p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium truncate">
+                            {r.staffName || "—"}
+                          </div>
+                          <div className="text-[0.7rem] text-muted-foreground font-mono">
+                            {r.deptLabel} · {r.date} · {r.start}–{r.end}
+                          </div>
+                        </div>
+                        <span className="font-mono text-sm">
                           {amt > 0 ? formatBND(amt) : "—"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <TickChip
+                          label="AM"
+                          on={t.am}
+                          onClick={() => toggleTick(r.slotId, "am")}
+                          disabled={readOnly || completed}
+                        />
+                        <TickChip
+                          label="PM"
+                          on={t.pm}
+                          onClick={() => toggleTick(r.slotId, "pm")}
+                          disabled={readOnly || completed}
+                        />
+                        <TickChip
+                          label={spansBoth ? "Full day ★" : "Full day"}
+                          on={t.am && t.pm}
+                          onClick={() => toggleBoth(r.slotId)}
+                          disabled={readOnly || completed}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
 
@@ -447,6 +544,38 @@ export function HrEditor({
 /** Small dropdown-picker for adding an OT row — kept out of the main
  *  component for readability. Renders as a native <select> whose choice
  *  event fires `onAdd`, then resets. */
+/** Touch-friendly toggle chip for the mobile meal-allowance card
+ *  view. Bigger tap target than a native checkbox and reads state at
+ *  a glance from colour. */
+function TickChip({
+  label,
+  on,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  on: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={on}
+      className={`h-10 rounded-md border text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+        on
+          ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-700 dark:text-emerald-400"
+          : "border-input hover:bg-secondary"
+      }`}
+    >
+      {on ? "✓ " : ""}
+      {label}
+    </button>
+  );
+}
+
 interface OtCandidate {
   id: string;
   fullName: string;

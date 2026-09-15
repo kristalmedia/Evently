@@ -102,29 +102,34 @@ export function canEditFinance(
 
 /** Read access to the full roster (not just one dept). Post the HR
  *  unlock, HR sees every dept's block; before then, only Super Admin
- *  and the dept's own Manager see their block. */
+ *  and the dept's own Manager see their block.
+ *
+ *  Once the roster is "done" — every Manager block flagged complete,
+ *  i.e. kemsStatus reaches HR_UNLOCKED or later — every viewer gets
+ *  read access to every dept's slots. The event detail page becomes
+ *  the shared source of truth for who's on shift, which is what people
+ *  reach for once the planning phase closes. */
 export function canViewFullRoster(
   user: User | null | undefined,
   kemsStatus: ShadowEventKemsStatus,
 ): boolean {
   if (!user || user.status === "disabled") return false;
   if (isSuperAdmin(user)) return true;
-  // HR gets full read once the roster is finalized by all Managers.
-  if (hasRole(user, "HR")) {
-    return (
-      kemsStatus === "HR_UNLOCKED" ||
-      kemsStatus === "FINANCE_UNLOCKED" ||
-      kemsStatus === "PUBLISHED"
-    );
+
+  // Once managers finish, the roster is a shared read for everyone.
+  // Same threshold that unlocks HR — the "roster is done" moment.
+  if (
+    kemsStatus === "HR_UNLOCKED" ||
+    kemsStatus === "FINANCE_UNLOCKED" ||
+    kemsStatus === "PUBLISHED"
+  ) {
+    return true;
   }
-  // FINANCE_LEAD gets full read once their turn opens (need it to
-  // reconcile HR's numbers against actual roster shifts).
-  if (hasRole(user, "FINANCE_LEAD")) {
-    return (
-      kemsStatus === "FINANCE_UNLOCKED" || kemsStatus === "PUBLISHED"
-    );
-  }
-  // Managers see their own dept only — see visibleDeptKeys below.
+
+  // Pre-completion: only role-based readers get full roster access
+  // (there is currently none before HR_UNLOCKED — Managers see their
+  // own dept via visibleDeptKeysForShadow; kept as a hook if a future
+  // role needs earlier full-read).
   return false;
 }
 

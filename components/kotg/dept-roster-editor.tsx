@@ -162,7 +162,13 @@ export function DeptRosterEditor({
             {slots.map((s) => (
               <div
                 key={s.id}
-                className="grid gap-2 grid-cols-1 sm:grid-cols-[9rem_6rem_6rem_1fr_auto] items-center rounded-md border p-2"
+                // `min-w-0` on the grid + the select cell is what lets
+                // the select actually shrink inside the 1fr column —
+                // without it, its widest option would force the row
+                // wider than the card. `overflow-hidden` on the row
+                // wrapper is the belt-and-braces so a very long option
+                // name still can't blow the container out.
+                className="grid gap-2 grid-cols-1 sm:grid-cols-[9rem_6rem_6rem_minmax(0,1fr)_auto] items-center rounded-md border p-2 min-w-0 overflow-hidden"
               >
                 <Input
                   type="date"
@@ -182,15 +188,21 @@ export function DeptRosterEditor({
                   onChange={(e) => updateSlot(s.id, { end: e.target.value })}
                   disabled={readOnly || initial.completed}
                 />
-                {/* Native select over the directory. A real combobox
-                    with type-ahead would be nicer but keeps parity with
-                    the dept-select style already used elsewhere and
-                    avoids a Radix Popover dependency. */}
+                {/* Native select over the directory. `w-full min-w-0
+                    max-w-full` + text-ellipsis on the select itself
+                    caps its rendered width and truncates the visible
+                    option label. */}
                 <select
-                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  className="h-9 w-full min-w-0 max-w-full rounded-md border border-input bg-background px-2 text-sm truncate"
                   value={s.staffUserId ?? ""}
                   onChange={(e) => updateSlot(s.id, { staffUserId: e.target.value })}
                   disabled={readOnly || initial.completed}
+                  // `title` shows the full "Name · Department" on hover
+                  // even when the visible label is truncated.
+                  title={
+                    sortedUsers.find((u) => u.id === s.staffUserId)?.fullName ??
+                    (s.staffUserId || undefined)
+                  }
                 >
                   <option value="">— select staff —</option>
                   {sortedUsers.map((u) => (
