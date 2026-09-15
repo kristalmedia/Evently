@@ -8,17 +8,14 @@ import {
   Download,
   FileDown,
   Lock,
-  Plus,
   Save,
   Timer,
-  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useDirectoryUsers } from "@/hooks/use-directory-users";
 import type {
   MealTickMap,
   OvertimeLine,
@@ -48,10 +45,6 @@ export interface FlatRosterRow {
 /** OT is restricted to these departments by business rule (matches
  *  OT_ELIGIBLE_DEPTS in app/api/kotg/[bookingId]/hr/route.ts). */
 const OT_ELIGIBLE_DEPTS = ["IT", "Technical"];
-
-function makeId(): string {
-  return `otl_${Math.random().toString(36).slice(2, 10)}`;
-}
 
 function mealForTick(t: { am: boolean; pm: boolean }): number {
   return (t.am ? 5 : 0) + (t.pm ? 5 : 0);
@@ -142,22 +135,35 @@ export function HrEditor({
     }
     return seeded;
   });
-  const [overtime, setOvertime] = useState<OvertimeLine[]>(initialOvertime);
-  const [busy, setBusy] = useState(false);
-  const { users } = useDirectoryUsers();
 
-  // OT candidate list = every directory user whose dept is OT-eligible
-  // AND who appears at least once in the roster. Second filter matches
-  // the spec: "based on the user that is working on the roster".
-  const otCandidates = useMemo(() => {
-    const rosterUserIds = new Set(roster.map((r) => r.staffUserId).filter(Boolean));
-    return users
-      .filter(
-        (u) =>
-          OT_ELIGIBLE_DEPTS.includes(u.department) && rosterUserIds.has(u.id),
-      )
-      .sort((a, b) => a.fullName.localeCompare(b.fullName));
-  }, [users, roster]);
+  // Overtime: keyed by slotId. OT rows are auto-generated per
+  // IT/Technical shift in the roster (see otRows below) — HR just
+  // types an amount into each pre-existing row. That mirrors how the
+  // meal-allowance grid works: nothing to add, nothing to remove,
+  // only per-shift values to fill in.
+  const [otAmounts, setOtAmounts] = useState<Record<string, number>>(() => {
+    const seeded: Record<string, number> = {};
+    for (const l of initialOvertime) {
+      if (l.slotId) seeded[l.slotId] = l.amountBND;
+    }
+    return seeded;
+  });
+  const [otNotes, setOtNotes] = useState<Record<string, string>>(() => {
+    const seeded: Record<string, string> = {};
+    for (const l of initialOvertime) {
+      if (l.slotId && l.notes) seeded[l.slotId] = l.notes;
+    }
+    return seeded;
+  });
+  const [busy, setBusy] = useState(false);
+
+  // Every roster shift whose staff belongs to an OT-eligible dept —
+  // these become the OT input rows one-for-one. Rows appear the
+  // moment a Manager adds an IT/Technical shift; no picker needed.
+  const otRows = useMemo(
+    () => roster.filter((r) => OT_ELIGIBLE_DEPTS.includes(r.staffDept)),
+    [roster],
+  );
 
   // Meal tick manipulation
   function toggleTick(slotId: string, half: "am" | "pm") {
@@ -184,24 +190,33 @@ export function HrEditor({
     });
   }
 
-  // OT row manipulation
-  function addOtRow(candidate: (typeof otCandidates)[number]) {
-    setOvertime((prev) => [
-      ...prev,
-      {
-        id: makeId(),
-        staffUserId: candidate.id,
-        staffName: candidate.fullName,
-        staffDept: candidate.department,
-        amountBND: 0,
-      },
-    ]);
+  function setOtAmount(slotId: string, amount: number) {
+    setOtAmounts((prev) => ({ ...prev, [slotId]: amount }));
   }
-  function updateOtRow(id: string, patch: Partial<OvertimeLine>) {
-    setOvertime((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  function setOtNote(slotId: string, note: string) {
+    setOtNotes((prev) => ({ ...prev, [slotId]: note }));
   }
-  function removeOtRow(id: string) {
-    setOvertime((prev) => prev.filter((l) => l.id !== id));
+
+  /** Materialise the current OT state back into the OvertimeLine[]
+   *  shape the API expects. Only rows with a positive amount are sent
+   *  — a zero row means "HR didn't grant OT for this shift", which
+   *  shouldn't take up a row in the persisted record. */
+  function materializeOtLines(): OvertimeLine[] {
+    return otRows
+      .map((r) => {
+        const amt = otAmounts[r.slotId] ?? 0;
+        if (!(amt > 0)) return null;
+        return {
+          id: `otl_${r.slotId}`,
+          slotId: r.slotId,
+          staffUserId: r.staffUserId,
+          staffName: r.staffName,
+          staffDept: r.staffDept,
+          amountBND: amt,
+          notes: otNotes[r.slotId] || undefined,
+        } as OvertimeLine;
+      })
+      .filter((l): l is OvertimeLine => l !== null);
   }
 
   // Totals — kept fully derived, never stored.
@@ -210,8 +225,12 @@ export function HrEditor({
     [ticks],
   );
   const overtimeTotal = useMemo(
-    () => overtime.reduce((s, l) => s + (Number.isFinite(l.amountBND) ? l.amountBND : 0), 0),
-    [overtime],
+    () =>
+      otRows.reduce((s, r) => {
+        const amt = otAmounts[r.slotId] ?? 0;
+        return s + (Number.isFinite(amt) ? amt : 0);
+      }, 0),
+    [otRows, otAmounts],
   );
 
   async function put(complete: boolean) {
@@ -220,7 +239,11 @@ export function HrEditor({
       const res = await fetch(`/api/kotg/${bookingId}/hr`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mealTicks: ticks, overtime, complete }),
+        body: JSON.stringify({
+          mealTicks: ticks,
+          overtime: materializeOtLines(),
+          complete,
+        }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
       toast.success(complete ? "HR marked complete — Finance next" : "HR saved", {
@@ -255,15 +278,21 @@ export function HrEditor({
           };
         })
         .filter((x): x is NonNullable<typeof x> => x !== null),
-      overtime: overtime.map((l) => ({
-        kind: "overtime" as const,
-        dept: l.staffDept,
-        staff: l.staffName,
-        date: "",
-        shift: "",
-        amount: l.amountBND,
-        notes: l.notes,
-      })),
+      overtime: otRows
+        .map((r) => {
+          const amt = otAmounts[r.slotId] ?? 0;
+          if (!(amt > 0)) return null;
+          return {
+            kind: "overtime" as const,
+            dept: r.staffDept,
+            staff: r.staffName,
+            date: r.date,
+            shift: `${r.start}–${r.end}`,
+            amount: amt,
+            notes: otNotes[r.slotId] || undefined,
+          };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null),
       mealTotal,
       overtimeTotal,
     };
@@ -527,39 +556,103 @@ export function HrEditor({
           )}
         </div>
 
-        {/* Overtime section */}
+        {/* Overtime section — auto-generated one row per IT / Technical
+            shift that already exists in the roster. HR just types an
+            amount into each row; leaving it 0 means "no OT for this
+            shift" and it's dropped on save. Same "no picker, one row
+            per shift" shape as the meal-allowance grid above. */}
         <div className="space-y-2">
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <div className="callsign inline-flex items-center gap-1.5">
               <Timer className="h-3 w-3" /> Overtime — IT &amp; Technical staff
             </div>
-            {!readOnly && !completed && (
-              <OtAddPicker candidates={otCandidates} onAdd={addOtRow} />
-            )}
+            <div className="text-[0.68rem] text-muted-foreground">
+              One row per IT / Technical shift in the roster. Type an amount
+              per shift; leave blank if no OT applies.
+            </div>
           </div>
-          {overtime.length === 0 ? (
+          {otRows.length === 0 ? (
             <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
-              No overtime rows yet. Use the picker above to add an OT entry
-              for an IT or Technical staff member appearing in the roster.
+              No IT or Technical staff in the roster — nothing to compensate.
+              Rows will appear here automatically once a Manager adds an IT or
+              Technical shift.
             </div>
           ) : (
-            <div className="space-y-2">
-              {overtime.map((l) => (
-                <div key={l.id} className="rounded-md border p-2 space-y-2">
-                  {/* Top row: staff identity on the left, amount + trash
-                      on the right so the whole action stays reachable at
-                      once glance on both phone and desktop. */}
-                  <div className="flex items-start gap-2">
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium truncate">
-                        {l.staffName}
+            <>
+              {/* Desktop / tablet — table for density and quick scan. */}
+              <div className="hidden sm:block rounded-md border overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/40 text-xs">
+                    <tr>
+                      <th className="text-left px-2 py-1.5">Dept</th>
+                      <th className="text-left px-2 py-1.5">Staff</th>
+                      <th className="text-left px-2 py-1.5">Date</th>
+                      <th className="text-left px-2 py-1.5">Shift</th>
+                      <th className="text-left px-2 py-1.5">Notes</th>
+                      <th className="text-right px-2 py-1.5 whitespace-nowrap">
+                        Amount (BND)
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {otRows.map((r) => (
+                      <tr key={r.slotId} className="border-t">
+                        <td className="px-2 py-1.5 text-muted-foreground uppercase text-xs font-mono">
+                          {r.staffDept}
+                        </td>
+                        <td className="px-2 py-1.5">{r.staffName || "—"}</td>
+                        <td className="px-2 py-1.5 font-mono text-xs">{r.date}</td>
+                        <td className="px-2 py-1.5 font-mono text-xs text-muted-foreground">
+                          {r.start}–{r.end}
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <Input
+                            placeholder="Reason / notes"
+                            value={otNotes[r.slotId] ?? ""}
+                            onChange={(e) => setOtNote(r.slotId, e.target.value)}
+                            disabled={readOnly || completed}
+                            className="h-8 text-sm"
+                          />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            placeholder="0.00"
+                            value={otAmounts[r.slotId] ?? 0}
+                            onChange={(e) =>
+                              setOtAmount(
+                                r.slotId,
+                                Number.parseFloat(e.target.value) || 0,
+                              )
+                            }
+                            disabled={readOnly || completed}
+                            className="h-8 w-28 text-right font-mono ml-auto"
+                            aria-label={`Overtime amount for ${r.staffName}`}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile: same content in stacked-card form so nothing
+                  gets clipped and every input is thumb-sized. */}
+              <div className="sm:hidden space-y-2">
+                {otRows.map((r) => (
+                  <div key={r.slotId} className="rounded-md border p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium truncate">
+                          {r.staffName || "—"}
+                        </div>
+                        <div className="text-[0.7rem] text-muted-foreground font-mono">
+                          {r.staffDept} · {r.date} · {r.start}–{r.end}
+                        </div>
                       </div>
-                      <div className="text-[0.65rem] text-muted-foreground font-mono uppercase">
-                        {l.staffDept}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="relative">
+                      <div className="relative shrink-0">
                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[0.65rem] font-mono text-muted-foreground pointer-events-none">
                           BND
                         </span>
@@ -568,41 +661,30 @@ export function HrEditor({
                           min={0}
                           step="0.01"
                           placeholder="0.00"
-                          value={Number.isFinite(l.amountBND) ? l.amountBND : 0}
+                          value={otAmounts[r.slotId] ?? 0}
                           onChange={(e) =>
-                            updateOtRow(l.id, {
-                              amountBND: Number.parseFloat(e.target.value) || 0,
-                            })
+                            setOtAmount(
+                              r.slotId,
+                              Number.parseFloat(e.target.value) || 0,
+                            )
                           }
                           disabled={readOnly || completed}
-                          className="w-28 pl-10 text-right font-mono"
-                          aria-label={`Overtime amount for ${l.staffName}`}
+                          className="h-9 w-28 pl-10 text-right font-mono"
+                          aria-label={`Overtime amount for ${r.staffName}`}
                         />
                       </div>
-                      {!readOnly && !completed && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeOtRow(l.id)}
-                          aria-label={`Remove overtime row for ${l.staffName}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-rose-500" />
-                        </Button>
-                      )}
                     </div>
+                    <Input
+                      placeholder="Reason / notes"
+                      value={otNotes[r.slotId] ?? ""}
+                      onChange={(e) => setOtNote(r.slotId, e.target.value)}
+                      disabled={readOnly || completed}
+                      className="text-sm"
+                    />
                   </div>
-                  {/* Notes on its own row so it can breathe on mobile
-                      and hold multi-word context. */}
-                  <Input
-                    placeholder="Notes (shift, reason)"
-                    value={l.notes ?? ""}
-                    onChange={(e) => updateOtRow(l.id, { notes: e.target.value })}
-                    disabled={readOnly || completed}
-                    className="text-sm"
-                  />
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
 
@@ -715,50 +797,3 @@ function TickChip({
   );
 }
 
-interface OtCandidate {
-  id: string;
-  fullName: string;
-  department: string;
-}
-
-// The picker only needs the three OtCandidate fields; keep the callback
-// generic so callers can pass a wider type (e.g. DirectoryUser) without
-// mapping to a narrower shape first.
-function OtAddPicker<T extends OtCandidate>({
-  candidates,
-  onAdd,
-}: {
-  candidates: T[];
-  onAdd: (c: T) => void;
-}) {
-  if (candidates.length === 0) {
-    return (
-      <span className="text-xs text-muted-foreground">
-        No IT / Technical staff on the roster yet.
-      </span>
-    );
-  }
-  return (
-    <div className="inline-flex items-center gap-2 ml-auto">
-      <select
-        className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-        value=""
-        onChange={(e) => {
-          const c = candidates.find((x) => x.id === e.target.value);
-          if (c) onAdd(c);
-          // Reset select so a repeat pick fires onChange again — this
-          // <select> is a fire-once trigger, not a bound value.
-          e.currentTarget.value = "";
-        }}
-      >
-        <option value="">+ Add OT for…</option>
-        {candidates.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.fullName} · {c.department}
-          </option>
-        ))}
-      </select>
-      <Plus className="h-3 w-3 text-muted-foreground" />
-    </div>
-  );
-}
