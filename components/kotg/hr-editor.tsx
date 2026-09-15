@@ -7,6 +7,7 @@ import {
   Coffee,
   Download,
   FileDown,
+  Lock,
   Plus,
   Save,
   Timer,
@@ -238,6 +239,31 @@ export function HrEditor({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Explicit read-only banner — the ticks and inputs render but
+            silently ignore clicks when readOnly / completed. Without
+            this, a viewer would rightfully wonder why the checkboxes
+            do nothing. */}
+        {(readOnly || completed) && (
+          <div className="rounded-md border border-muted bg-muted/30 p-3 text-xs flex items-start gap-2">
+            <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              {completed ? (
+                <>
+                  <span className="font-medium">Read-only — HR block completed.</span>{" "}
+                  Ticks and OT rows are frozen. Only a Super Admin can reopen
+                  by editing the shadow record directly.
+                </>
+              ) : (
+                <>
+                  <span className="font-medium">Read-only — you don't have HR edit access.</span>{" "}
+                  Only users with the HR role (or Super Admin) can tick meal
+                  allowance / edit overtime on this booking.
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Distinct totals — meal on the left, OT on the right, grand
             total on its own row so the two never visually blur. */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">

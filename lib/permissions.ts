@@ -77,8 +77,14 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "notifications.view",
   ],
   HR: [
+    // HR owns the overtime + meal-allowance block on every KOTG booking
+    // (see components/kotg/hr-editor.tsx), so they need budget.view to
+    // reach it — that permission gates the HR editor's parent on the
+    // event detail page. Without it, an HR user can't see, let alone
+    // tick, their own meal-allowance grid.
     "dashboard.view",
     "events.view",
+    "budget.view",
     "calendar.view",
     "reports.view",
     "notifications.view",
