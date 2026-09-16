@@ -3,6 +3,7 @@ import {
   CheckCircle2,
   Cog,
   Mail,
+  ShieldCheck,
   XCircle,
 } from "lucide-react";
 import { PageHeader } from "@/components/shared/page-header";
@@ -12,16 +13,24 @@ import { requireSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { transportStatus } from "@/lib/store";
 
-const REQUIRED_VARS: { key: string; hint: string }[] = [
+interface EnvVar {
+  key: string;
+  hint: string;
+}
+
+const GRAPH_VARS: EnvVar[] = [
+  { key: "MSGRAPH_TENANT_ID", hint: "Directory (tenant) ID from the Entra app registration" },
+  { key: "MSGRAPH_CLIENT_ID", hint: "Application (client) ID from the Entra app" },
+  { key: "MSGRAPH_CLIENT_SECRET", hint: "Client secret VALUE (not Secret ID) — rotate periodically" },
+  { key: "MSGRAPH_SENDER_UPN", hint: "Licensed mailbox UPN to send as, e.g. noreply@kristal.media" },
+];
+
+const SMTP_VARS: EnvVar[] = [
   { key: "EMAIL_SMTP_HOST", hint: "e.g. smtp.office365.com, smtp.sendgrid.net" },
   { key: "EMAIL_SMTP_PORT", hint: "587 (STARTTLS) or 465 (TLS)" },
   { key: "EMAIL_SMTP_USER", hint: "SMTP username / API key user" },
   { key: "EMAIL_SMTP_PASS", hint: "SMTP password / API key secret" },
   { key: "EMAIL_FROM", hint: "Verified sender address" },
-];
-
-const OPTIONAL_VARS: { key: string; hint: string }[] = [
-  { key: "EMAIL_SMTP_SECURE", hint: "'true' for port 465, default false" },
 ];
 
 export default async function SettingsPage() {
@@ -30,6 +39,7 @@ export default async function SettingsPage() {
 
   const status = transportStatus();
   const configured = status.configured;
+  const activeTransport = status.transport;
 
   return (
     <div className="space-y-6">
@@ -39,15 +49,15 @@ export default async function SettingsPage() {
         description="Configuration status for external integrations. Values are read from environment variables at runtime — set them in .env.local and restart the server to apply."
       />
 
-      {/* SMTP status card (spec §4) */}
+      {/* Email transport card */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Mail className="h-4 w-4 text-accent" />
-            Email notification engine — SMTP
+            Email notification engine
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5">
           {/* Status banner */}
           <div
             className={`rounded-lg border p-4 flex items-start gap-3 ${
@@ -64,25 +74,41 @@ export default async function SettingsPage() {
             <div className="space-y-1 min-w-0 flex-1">
               <div className="text-sm font-medium">
                 {configured
-                  ? "SMTP configured — email dispatch is enabled"
-                  : "SMTP not configured — email dispatch is currently simulated"}
+                  ? `Email dispatch enabled via ${activeTransport === "graph" ? "Microsoft Graph (Entra app)" : "SMTP"}`
+                  : "Email transport not configured — dispatch is currently simulated"}
               </div>
               <div className="text-xs text-muted-foreground">
                 {configured
-                  ? "Invitation emails and other user alerts will be delivered through your configured provider."
-                  : `Set the required environment variables in .env.local to enable real email delivery. Missing: ${status.missing.join(", ")}.`}
+                  ? activeTransport === "graph"
+                    ? "Invitation, active-booking and confirmation emails are delivered through the Entra app's Mail.Send permission. No plaintext mailbox password required."
+                    : "Invitation and notification emails are delivered through your configured SMTP relay. Consider switching to Microsoft Graph (recommended) for better secret hygiene."
+                  : "Set either the MSGRAPH_ block (recommended) or the EMAIL_SMTP_ block in .env.local to enable real delivery."}
               </div>
             </div>
             <Badge variant={configured ? "emerald" : "amber"}>
-              {configured ? "Enabled" : "Simulated"}
+              {configured
+                ? activeTransport === "graph"
+                  ? "Graph"
+                  : "SMTP"
+                : "Simulated"}
             </Badge>
           </div>
 
-          {/* Var checklist */}
+          {/* Graph transport section — the recommended path */}
           <div className="space-y-2">
-            <div className="callsign">Required environment variables</div>
+            <div className="flex items-center justify-between">
+              <div className="callsign inline-flex items-center gap-1.5">
+                <ShieldCheck className="h-3 w-3" />
+                Option A: Microsoft Graph (recommended)
+              </div>
+              {activeTransport === "graph" && (
+                <Badge variant="emerald" className="text-[0.6rem]">
+                  Active
+                </Badge>
+              )}
+            </div>
             <div className="rounded-md border overflow-hidden divide-y">
-              {REQUIRED_VARS.map((v) => {
+              {GRAPH_VARS.map((v) => {
                 const set = !!process.env[v.key];
                 return (
                   <div
@@ -107,17 +133,29 @@ export default async function SettingsPage() {
             </div>
           </div>
 
+          {/* SMTP fallback section */}
           <div className="space-y-2">
-            <div className="callsign">Optional</div>
+            <div className="flex items-center justify-between">
+              <div className="callsign">Option B: SMTP fallback</div>
+              {activeTransport === "smtp" && (
+                <Badge variant="emerald" className="text-[0.6rem]">
+                  Active
+                </Badge>
+              )}
+            </div>
             <div className="rounded-md border overflow-hidden divide-y">
-              {OPTIONAL_VARS.map((v) => {
+              {SMTP_VARS.map((v) => {
                 const set = !!process.env[v.key];
                 return (
                   <div
                     key={v.key}
                     className="grid grid-cols-[24px_1fr_auto] gap-3 items-center px-3 py-2"
                   >
-                    <span className="text-muted-foreground text-xs font-mono">·</span>
+                    {set ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    ) : (
+                      <span className="text-muted-foreground text-xs font-mono">·</span>
+                    )}
                     <div>
                       <div className="font-mono text-xs">{v.key}</div>
                       <div className="text-[0.7rem] text-muted-foreground">{v.hint}</div>
@@ -132,22 +170,32 @@ export default async function SettingsPage() {
           </div>
 
           <div className="rounded-md bg-muted/40 border p-3 text-xs text-muted-foreground space-y-2">
-            <div className="font-medium text-foreground">How to configure</div>
+            <div className="font-medium text-foreground">How to configure Microsoft Graph</div>
             <ol className="list-decimal list-inside space-y-1">
               <li>
-                Copy <code className="font-mono">.env.local.example</code> to{" "}
-                <code className="font-mono">.env.local</code>
+                Azure Portal → <span className="font-medium">Entra ID → App registrations</span>{" "}
+                (reuse the SSO app or create a new one).
               </li>
-              <li>Fill in the SMTP block with your provider's credentials</li>
-              <li>Restart the dev server (or redeploy in production)</li>
-              <li>Reload this page — the status above should flip to Enabled</li>
+              <li>
+                <span className="font-medium">API permissions → Add → Microsoft Graph →
+                Application permissions</span>, tick <code className="font-mono">Mail.Send</code>, then{" "}
+                <span className="font-medium">Grant admin consent</span>.
+              </li>
+              <li>
+                <span className="font-medium">Certificates &amp; secrets → New client secret</span>,
+                copy the Value column immediately (Azure only shows it once).
+              </li>
+              <li>
+                Pick a licensed Exchange mailbox as{" "}
+                <code className="font-mono">MSGRAPH_SENDER_UPN</code> (e.g. a shared{" "}
+                <code className="font-mono">noreply@kristal.media</code> mailbox).
+              </li>
+              <li>
+                Paste all four values into <code className="font-mono">.env.local</code> and
+                restart the dev server. Reload this page — the banner should flip to{" "}
+                <span className="font-medium">Graph · Enabled</span>.
+              </li>
             </ol>
-            <div className="pt-1">
-              Common providers: <span className="font-medium">Office 365</span> (smtp.office365.com:587),{" "}
-              <span className="font-medium">SendGrid</span> (smtp.sendgrid.net:587 with user{" "}
-              <code className="font-mono">apikey</code>),{" "}
-              <span className="font-medium">Resend</span> (smtp.resend.com:465).
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -163,7 +211,7 @@ export default async function SettingsPage() {
         <CardContent>
           <p className="text-sm text-muted-foreground">
             Microsoft Entra ID single sign-on, company profile, timezone, and
-            calendar preferences will land here as they're wired up. The
+            calendar preferences will land here as they&apos;re wired up. The
             permissions, store, and RBAC scaffolding is already in place.
           </p>
         </CardContent>
