@@ -628,29 +628,48 @@ export function HrEditor({
                           {r.start}–{r.end}
                         </td>
                         <td className="px-2 py-1.5">
-                          <Input
+                          <input
+                            type="text"
                             placeholder="Reason / notes"
                             value={otNotes[r.slotId] ?? ""}
                             onChange={(e) => setOtNote(r.slotId, e.target.value)}
                             disabled={otLocked}
-                            className="h-8 text-sm"
+                            className="flex h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                           />
                         </td>
                         <td className="px-2 py-1.5">
-                          <Input
-                            type="number"
-                            min={0}
-                            step="0.01"
+                          {/* Plain text input (not type=number) — the
+                              spinner UX on number inputs was making
+                              the field feel unresponsive to typed
+                              digits in some browser builds, and we
+                              validate/coerce numerically on save
+                              anyway. inputMode=decimal still surfaces
+                              the numeric keypad on mobile. */}
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            pattern="[0-9]*\.?[0-9]*"
                             placeholder="0.00"
-                            value={otAmounts[r.slotId] ?? 0}
-                            onChange={(e) =>
-                              setOtAmount(
-                                r.slotId,
-                                Number.parseFloat(e.target.value) || 0,
-                              )
+                            value={
+                              otAmounts[r.slotId] === undefined ||
+                              otAmounts[r.slotId] === 0
+                                ? ""
+                                : String(otAmounts[r.slotId])
                             }
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              // Allow empty string and partial decimals
+                              // like "5." while typing; parseFloat("5.")
+                              // is 5, which is fine to store.
+                              if (raw === "") {
+                                setOtAmount(r.slotId, 0);
+                              } else {
+                                const n = Number.parseFloat(raw);
+                                setOtAmount(r.slotId, Number.isFinite(n) ? n : 0);
+                              }
+                            }}
                             disabled={otLocked}
-                            className="h-8 w-28 text-right font-mono ml-auto"
+                            className="flex h-8 w-28 rounded-md border border-input bg-background px-3 py-1 text-sm text-right font-mono shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ml-auto"
                             aria-label={`Overtime amount for ${r.staffName}`}
                           />
                         </td>
@@ -678,30 +697,39 @@ export function HrEditor({
                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[0.65rem] font-mono text-muted-foreground pointer-events-none">
                           BND
                         </span>
-                        <Input
-                          type="number"
-                          min={0}
-                          step="0.01"
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          pattern="[0-9]*\.?[0-9]*"
                           placeholder="0.00"
-                          value={otAmounts[r.slotId] ?? 0}
-                          onChange={(e) =>
-                            setOtAmount(
-                              r.slotId,
-                              Number.parseFloat(e.target.value) || 0,
-                            )
+                          value={
+                            otAmounts[r.slotId] === undefined ||
+                            otAmounts[r.slotId] === 0
+                              ? ""
+                              : String(otAmounts[r.slotId])
                           }
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === "") {
+                              setOtAmount(r.slotId, 0);
+                            } else {
+                              const n = Number.parseFloat(raw);
+                              setOtAmount(r.slotId, Number.isFinite(n) ? n : 0);
+                            }
+                          }}
                           disabled={otLocked}
-                          className="h-9 w-28 pl-10 text-right font-mono"
+                          className="flex h-9 w-28 pl-10 rounded-md border border-input bg-background px-3 py-1 text-sm text-right font-mono shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                           aria-label={`Overtime amount for ${r.staffName}`}
                         />
                       </div>
                     </div>
-                    <Input
+                    <input
+                      type="text"
                       placeholder="Reason / notes"
                       value={otNotes[r.slotId] ?? ""}
                       onChange={(e) => setOtNote(r.slotId, e.target.value)}
                       disabled={otLocked}
-                      className="text-sm"
+                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                     />
                   </div>
                 ))}
