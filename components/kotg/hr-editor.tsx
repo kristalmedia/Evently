@@ -146,27 +146,13 @@ export function HrEditor({
     return seeded;
   });
 
-  // Overtime: keyed by slotId. Amounts stored as STRINGS so the input
-  // stays trivially controlled — no coerce-to-number on every keystroke
-  // (which was making partial values like "5." bounce back to 5 and
-  // felt like the field was fighting the user). Converted to numbers
-  // once, on save, in materializeOtLines().
-  const [otAmounts, setOtAmounts] = useState<Record<string, string>>(() => {
-    const seeded: Record<string, string> = {};
-    for (const l of initialOvertime) {
-      if (l.slotId && l.amountBND > 0) {
-        seeded[l.slotId] = String(l.amountBND);
-      }
-    }
-    return seeded;
-  });
-  const [otNotes, setOtNotes] = useState<Record<string, string>>(() => {
-    const seeded: Record<string, string> = {};
-    for (const l of initialOvertime) {
-      if (l.slotId && l.notes) seeded[l.slotId] = l.notes;
-    }
-    return seeded;
-  });
+  // Overtime state was removed — HR now enters OT amounts by hand on
+  // the printed PDF, not in KEMS. The on-screen OT section is info-only
+  // (which shifts qualify), and the PDF export renders blank Notes /
+  // Amount columns for handwriting. `initialOvertime` is intentionally
+  // unused on the client but kept in the API/type contract so existing
+  // shadow records survive round-trips.
+  void initialOvertime;
   const [busy, setBusy] = useState(false);
 
   // Every roster shift whose staff belongs to an OT-eligible dept —
@@ -202,64 +188,18 @@ export function HrEditor({
     });
   }
 
-  function setOtAmount(slotId: string, amount: string) {
-    // Accept anything the user types; a light filter strips characters
-    // that aren't part of a decimal number so paste-junk doesn't get in
-    // (leaves the input responsive to legitimate keystrokes).
-    const cleaned = amount.replace(/[^0-9.]/g, "");
-    setOtAmounts((prev) => ({ ...prev, [slotId]: cleaned }));
-  }
-  function setOtNote(slotId: string, note: string) {
-    setOtNotes((prev) => ({ ...prev, [slotId]: note }));
-  }
-
-  /** Coerce a stored OT amount string to a number for math or save.
-   *  Empty / non-numeric → 0. */
-  function otAmountNumber(slotId: string): number {
-    const raw = otAmounts[slotId];
-    if (!raw) return 0;
-    const n = Number.parseFloat(raw);
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  /** Materialise the current OT state back into the OvertimeLine[]
-   *  shape the API expects. Only rows with a positive amount are sent
-   *  — a zero row means "HR didn't grant OT for this shift", which
-   *  shouldn't take up a row in the persisted record. */
+  // OT amounts are entered by hand on the printed PDF, so nothing to
+  // materialise on save — the API contract still accepts overtime[]
+  // but the client sends an empty array to keep the persisted record
+  // clean.
   function materializeOtLines(): OvertimeLine[] {
-    return otRows
-      .map((r) => {
-        const amt = otAmountNumber(r.slotId);
-        if (!(amt > 0)) return null;
-        return {
-          id: `otl_${r.slotId}`,
-          slotId: r.slotId,
-          staffUserId: r.staffUserId,
-          staffName: r.staffName,
-          staffDept: r.staffDept,
-          amountBND: amt,
-          notes: otNotes[r.slotId] || undefined,
-        } as OvertimeLine;
-      })
-      .filter((l): l is OvertimeLine => l !== null);
+    return [];
   }
 
-  // Totals — kept fully derived, never stored.
+  // Meal total is kept fully derived, never stored.
   const mealTotal = useMemo(
     () => Object.values(ticks).reduce((s, t) => s + mealForTick(t), 0),
     [ticks],
-  );
-  // Only used for the export bundle now (no on-screen tile) — HR
-  // asked to remove the running OT total from the UI. Materialising
-  // once here keeps the export accurate without adding a display.
-  const overtimeTotal = useMemo(
-    () =>
-      otRows.reduce((s, r) => {
-        return s + otAmountNumber(r.slotId);
-      }, 0),
-    // otAmountNumber closes over otAmounts, so we depend on that map.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [otRows, otAmounts],
   );
 
   async function put(complete: boolean) {
@@ -307,23 +247,21 @@ export function HrEditor({
           };
         })
         .filter((x): x is NonNullable<typeof x> => x !== null),
-      overtime: otRows
-        .map((r) => {
-          const amt = otAmountNumber(r.slotId);
-          if (!(amt > 0)) return null;
-          return {
-            kind: "overtime" as const,
-            dept: r.staffDept,
-            staff: r.staffName,
-            date: r.date,
-            shift: `${r.start}–${r.end}`,
-            amount: amt,
-            notes: otNotes[r.slotId] || undefined,
-          };
-        })
-        .filter((x): x is NonNullable<typeof x> => x !== null),
+      // For the PDF form, every IT/Technical shift becomes an OT row
+      // with a BLANK amount and notes — HR fills those in by hand on
+      // the printed page. Zero amounts here tell the exporter to
+      // leave the cells empty rather than print "0.00".
+      overtime: otRows.map((r) => ({
+        kind: "overtime" as const,
+        dept: r.staffDept,
+        staff: r.staffName,
+        date: r.date,
+        shift: `${r.start}–${r.end}`,
+        amount: 0,
+        notes: undefined,
+      })),
       mealTotal,
-      overtimeTotal,
+      overtimeTotal: 0,
     };
   }
 
@@ -581,19 +519,21 @@ export function HrEditor({
           )}
         </div>
 
-        {/* Overtime section — auto-generated one row per IT / Technical
-            shift that already exists in the roster. HR just types an
-            amount into each row; leaving it 0 means "no OT for this
-            shift" and it's dropped on save. Same "no picker, one row
-            per shift" shape as the meal-allowance grid above. */}
+        {/* Overtime section — info-only on screen. Notes + Amount fields
+            were removed per HR's request; those are filled in by hand
+            on the printed PDF (see exportHrPdf — the PDF renders blank
+            Notes and Amount columns for handwriting). The on-screen
+            table exists so HR can see WHICH shifts qualify for OT
+            before printing. */}
         <div className="space-y-2">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <div className="callsign inline-flex items-center gap-1.5">
               <Timer className="h-3 w-3" /> Overtime — IT &amp; Technical staff
             </div>
             <div className="text-[0.68rem] text-muted-foreground">
-              One row per IT / Technical shift in the roster. Type an amount
-              per shift; leave blank if no OT applies.
+              One row per IT / Technical shift in the roster. Export as PDF
+              — the printed form has blank Notes and Amount columns for HR
+              to fill in by hand.
             </div>
           </div>
           {otRows.length === 0 ? (
@@ -604,7 +544,7 @@ export function HrEditor({
             </div>
           ) : (
             <>
-              {/* Desktop / tablet — table for density and quick scan. */}
+              {/* Desktop / tablet — compact info table. */}
               <div className="hidden sm:block rounded-md border overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/40 text-xs">
@@ -613,10 +553,6 @@ export function HrEditor({
                       <th className="text-left px-2 py-1.5">Staff</th>
                       <th className="text-left px-2 py-1.5">Date</th>
                       <th className="text-left px-2 py-1.5">Shift</th>
-                      <th className="text-left px-2 py-1.5">Notes</th>
-                      <th className="text-right px-2 py-1.5 whitespace-nowrap">
-                        Amount (BND)
-                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -630,77 +566,22 @@ export function HrEditor({
                         <td className="px-2 py-1.5 font-mono text-xs text-muted-foreground">
                           {r.start}–{r.end}
                         </td>
-                        <td className="px-2 py-1.5">
-                          <input
-                            type="text"
-                            placeholder="Reason / notes"
-                            value={otNotes[r.slotId] ?? ""}
-                            onChange={(e) => setOtNote(r.slotId, e.target.value)}
-                            disabled={otLocked}
-                            className="flex h-8 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                          />
-                        </td>
-                        <td className="px-2 py-1.5">
-                          {/* Plain text input backed by string state
-                              (no coerce-to-number on every keystroke).
-                              inputMode=decimal still surfaces the
-                              numeric keypad on mobile; parse happens
-                              once at save time. */}
-                          <input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="0.00"
-                            value={otAmounts[r.slotId] ?? ""}
-                            onChange={(e) => setOtAmount(r.slotId, e.target.value)}
-                            disabled={otLocked}
-                            className="flex h-8 w-28 rounded-md border border-input bg-background px-3 py-1 text-sm text-right font-mono shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ml-auto"
-                            aria-label={`Overtime amount for ${r.staffName}`}
-                          />
-                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
 
-              {/* Mobile: same content in stacked-card form so nothing
-                  gets clipped and every input is thumb-sized. */}
+              {/* Mobile: stacked info cards. */}
               <div className="sm:hidden space-y-2">
                 {otRows.map((r) => (
-                  <div key={r.slotId} className="rounded-md border p-3 space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium truncate">
-                          {r.staffName || "—"}
-                        </div>
-                        <div className="text-[0.7rem] text-muted-foreground font-mono">
-                          {r.staffDept} · {r.date} · {r.start}–{r.end}
-                        </div>
-                      </div>
-                      <div className="relative shrink-0">
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[0.65rem] font-mono text-muted-foreground pointer-events-none">
-                          BND
-                        </span>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          placeholder="0.00"
-                          value={otAmounts[r.slotId] ?? ""}
-                          onChange={(e) => setOtAmount(r.slotId, e.target.value)}
-                          disabled={otLocked}
-                          className="flex h-9 w-28 pl-10 rounded-md border border-input bg-background px-3 py-1 text-sm text-right font-mono shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                          aria-label={`Overtime amount for ${r.staffName}`}
-                        />
-                      </div>
+                  <div key={r.slotId} className="rounded-md border p-3">
+                    <div className="text-sm font-medium truncate">
+                      {r.staffName || "—"}
                     </div>
-                    <input
-                      type="text"
-                      placeholder="Reason / notes"
-                      value={otNotes[r.slotId] ?? ""}
-                      onChange={(e) => setOtNote(r.slotId, e.target.value)}
-                      disabled={otLocked}
-                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                    />
+                    <div className="text-[0.7rem] text-muted-foreground font-mono">
+                      {r.staffDept} · {r.date} · {r.start}–{r.end}
+                    </div>
                   </div>
                 ))}
               </div>

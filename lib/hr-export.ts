@@ -72,6 +72,9 @@ export function exportHrCsv(bundle: HrExportBundle): void {
   rows.push("");
   rows.push("Kind,Department,Staff,Date,Shift,Amount (BND),Notes");
   for (const r of [...bundle.meal, ...bundle.overtime]) {
+    // OT rows with amount == 0 print as blank Notes / Amount cells —
+    // those are handwritten fields on the paired PDF, not empty data.
+    const isBlankOtRow = r.kind === "overtime" && r.amount === 0;
     rows.push(
       [
         r.kind,
@@ -79,8 +82,8 @@ export function exportHrCsv(bundle: HrExportBundle): void {
         r.staff,
         r.date,
         r.shift,
-        r.amount.toFixed(2),
-        r.notes ?? "",
+        isBlankOtRow ? "" : r.amount.toFixed(2),
+        isBlankOtRow ? "" : (r.notes ?? ""),
       ]
         .map(csvField)
         .join(","),
@@ -88,10 +91,7 @@ export function exportHrCsv(bundle: HrExportBundle): void {
   }
   rows.push("");
   rows.push(`Meal allowance total,,,,,${bundle.mealTotal.toFixed(2)}`);
-  rows.push(`Overtime total,,,,,${bundle.overtimeTotal.toFixed(2)}`);
-  rows.push(
-    `Grand total,,,,,${(bundle.mealTotal + bundle.overtimeTotal).toFixed(2)}`,
-  );
+  rows.push(`Overtime total,,,,,(handwritten on PDF)`);
 
   const blob = new Blob([rows.join("\r\n")], { type: "text/csv;charset=utf-8" });
   download(blob, `hr-${bundle.bookingId}-${todayStamp()}.csv`);
@@ -149,36 +149,52 @@ export async function exportHrPdf(bundle: HrExportBundle): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   cursorY = (doc as any).lastAutoTable.finalY + 24;
 
-  // Overtime table
+  // Overtime table — printed as a fillable form. Notes and Amount
+  // cells are intentionally BLANK when amount == 0 so HR can write
+  // the values by hand on the printed page. Cells are also given a
+  // taller row height for pen legibility.
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
-  doc.text("Overtime (IT & Technical)", 40, cursorY);
+  doc.text("Overtime (IT & Technical) — fill by hand", 40, cursorY);
   cursorY += 8;
   autoTable(doc, {
     startY: cursorY,
-    head: [["Dept", "Staff", "Amount (BND)", "Notes"]],
+    head: [["Dept", "Staff", "Date", "Shift", "Notes", "Amount (BND)"]],
     body:
       bundle.overtime.length === 0
-        ? [["—", "No entries", "0.00", ""]]
+        ? [["—", "No IT / Technical shifts on roster", "", "", "", ""]]
         : bundle.overtime.map((r) => [
             r.dept,
             r.staff,
-            r.amount.toFixed(2),
-            r.notes ?? "",
+            r.date,
+            r.shift,
+            r.amount > 0 ? (r.notes ?? "") : "",
+            r.amount > 0 ? r.amount.toFixed(2) : "",
           ]),
-    foot: [["", "Total", bundle.overtimeTotal.toFixed(2), ""]],
-    styles: { fontSize: 9, cellPadding: 4 },
+    styles: { fontSize: 9, cellPadding: 8, minCellHeight: 22 },
     headStyles: { fillColor: [23, 37, 84] },
-    footStyles: { fillColor: [241, 245, 249], textColor: 20, fontStyle: "bold" },
+    columnStyles: {
+      4: { cellWidth: 180 },
+      5: { cellWidth: 80, halign: "right" },
+    },
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   cursorY = (doc as any).lastAutoTable.finalY + 24;
 
-  // Grand total
+  // Grand total — meal only, since OT amounts are filled in by hand
+  // and aren't known at export time.
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
   doc.text(
-    `Grand total: ${formatBND(bundle.mealTotal + bundle.overtimeTotal)}`,
+    `Meal allowance total: ${formatBND(bundle.mealTotal)}`,
+    40,
+    cursorY,
+  );
+  cursorY += 16;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.text(
+    "Overtime total: __________ (sum by hand after filling amounts above)",
     40,
     cursorY,
   );

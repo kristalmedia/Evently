@@ -51,12 +51,15 @@ export function KristalWordmark({ className }: { className?: string }) {
   return (
     <div className={cn("flex items-center gap-2", className)}>
       <KristalMark />
+      {/* Product brand — "Evently". The subordinated "Kristal Media"
+       *  line stays as small caps above so IT / venue partners still
+       *  know whose system it is at a glance. */}
       <div className="leading-none">
         <div className="text-[0.6rem] font-mono uppercase tracking-[0.22em] text-muted-foreground">
           Kristal Media
         </div>
-        <div className="text-sm font-semibold tracking-tight">
-          Event Management
+        <div className="text-base font-semibold tracking-tight">
+          Evently
         </div>
       </div>
     </div>

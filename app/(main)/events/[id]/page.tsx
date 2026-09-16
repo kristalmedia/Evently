@@ -296,8 +296,10 @@ export default async function EventDetailPage({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <BudgetStat label="Overtime (HR)" value={formatBND(budget.overtimeBND)} />
+            {/* Overtime tile removed — HR captures OT amounts by hand
+                on the printed PDF form, not in KEMS. Grand total below
+                is meal + other only. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <BudgetStat
                 label="Meal allowance (HR)"
                 value={formatBND(budget.mealAllowanceBND)}
@@ -310,7 +312,7 @@ export default async function EventDetailPage({
             <div className="mt-4 pt-4 border-t flex items-center justify-between">
               <span className="callsign">Grand total (est.)</span>
               <span className="text-lg font-mono font-semibold text-accent">
-                {formatBND(budget.totalEstBND)}
+                {formatBND(budget.mealAllowanceBND + budget.otherEstBND)}
               </span>
             </div>
           </CardContent>

@@ -6,7 +6,7 @@ import { Toaster } from "sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Kristal EMS — Event Management System",
+  title: "Evently — Kristal Media",
   description:
     "Internal event concept, approval, and lifecycle management for Kristal Media Sdn Bhd.",
 };
