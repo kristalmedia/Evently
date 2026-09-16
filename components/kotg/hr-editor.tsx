@@ -146,15 +146,17 @@ export function HrEditor({
     return seeded;
   });
 
-  // Overtime: keyed by slotId. OT rows are auto-generated per
-  // IT/Technical shift in the roster (see otRows below) — HR just
-  // types an amount into each pre-existing row. That mirrors how the
-  // meal-allowance grid works: nothing to add, nothing to remove,
-  // only per-shift values to fill in.
-  const [otAmounts, setOtAmounts] = useState<Record<string, number>>(() => {
-    const seeded: Record<string, number> = {};
+  // Overtime: keyed by slotId. Amounts stored as STRINGS so the input
+  // stays trivially controlled — no coerce-to-number on every keystroke
+  // (which was making partial values like "5." bounce back to 5 and
+  // felt like the field was fighting the user). Converted to numbers
+  // once, on save, in materializeOtLines().
+  const [otAmounts, setOtAmounts] = useState<Record<string, string>>(() => {
+    const seeded: Record<string, string> = {};
     for (const l of initialOvertime) {
-      if (l.slotId) seeded[l.slotId] = l.amountBND;
+      if (l.slotId && l.amountBND > 0) {
+        seeded[l.slotId] = String(l.amountBND);
+      }
     }
     return seeded;
   });
@@ -200,11 +202,24 @@ export function HrEditor({
     });
   }
 
-  function setOtAmount(slotId: string, amount: number) {
-    setOtAmounts((prev) => ({ ...prev, [slotId]: amount }));
+  function setOtAmount(slotId: string, amount: string) {
+    // Accept anything the user types; a light filter strips characters
+    // that aren't part of a decimal number so paste-junk doesn't get in
+    // (leaves the input responsive to legitimate keystrokes).
+    const cleaned = amount.replace(/[^0-9.]/g, "");
+    setOtAmounts((prev) => ({ ...prev, [slotId]: cleaned }));
   }
   function setOtNote(slotId: string, note: string) {
     setOtNotes((prev) => ({ ...prev, [slotId]: note }));
+  }
+
+  /** Coerce a stored OT amount string to a number for math or save.
+   *  Empty / non-numeric → 0. */
+  function otAmountNumber(slotId: string): number {
+    const raw = otAmounts[slotId];
+    if (!raw) return 0;
+    const n = Number.parseFloat(raw);
+    return Number.isFinite(n) ? n : 0;
   }
 
   /** Materialise the current OT state back into the OvertimeLine[]
@@ -214,7 +229,7 @@ export function HrEditor({
   function materializeOtLines(): OvertimeLine[] {
     return otRows
       .map((r) => {
-        const amt = otAmounts[r.slotId] ?? 0;
+        const amt = otAmountNumber(r.slotId);
         if (!(amt > 0)) return null;
         return {
           id: `otl_${r.slotId}`,
@@ -234,12 +249,16 @@ export function HrEditor({
     () => Object.values(ticks).reduce((s, t) => s + mealForTick(t), 0),
     [ticks],
   );
+  // Only used for the export bundle now (no on-screen tile) — HR
+  // asked to remove the running OT total from the UI. Materialising
+  // once here keeps the export accurate without adding a display.
   const overtimeTotal = useMemo(
     () =>
       otRows.reduce((s, r) => {
-        const amt = otAmounts[r.slotId] ?? 0;
-        return s + (Number.isFinite(amt) ? amt : 0);
+        return s + otAmountNumber(r.slotId);
       }, 0),
+    // otAmountNumber closes over otAmounts, so we depend on that map.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [otRows, otAmounts],
   );
 
@@ -290,7 +309,7 @@ export function HrEditor({
         .filter((x): x is NonNullable<typeof x> => x !== null),
       overtime: otRows
         .map((r) => {
-          const amt = otAmounts[r.slotId] ?? 0;
+          const amt = otAmountNumber(r.slotId);
           if (!(amt > 0)) return null;
           return {
             kind: "overtime" as const,
@@ -370,36 +389,20 @@ export function HrEditor({
           </div>
         )}
 
-        {/* Distinct totals — meal on the left, OT on the right, grand
-            total on its own row so the two never visually blur. */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-          <div className="rounded-md border p-3 bg-emerald-500/[0.04] border-emerald-500/30">
-            <div className="callsign inline-flex items-center gap-1.5">
-              <Coffee className="h-3 w-3" /> Meal allowance
-            </div>
-            <div className="font-mono text-xl font-semibold text-emerald-700 dark:text-emerald-400">
-              {formatBND(mealTotal)}
-            </div>
-            <div className="text-xs text-muted-foreground mt-0.5">
-              BND 5 per AM/PM tick
-            </div>
+        {/* Meal-allowance total only — the overtime total was removed
+            per HR's request. OT amounts are HR's / Finance's manual
+            per-shift entries and each row shows its own amount below;
+            an aggregate at the top wasn't adding value and made it
+            look like KEMS was calculating OT automatically. */}
+        <div className="rounded-md border p-3 bg-emerald-500/[0.04] border-emerald-500/30 max-w-sm">
+          <div className="callsign inline-flex items-center gap-1.5">
+            <Coffee className="h-3 w-3" /> Meal allowance total
           </div>
-          <div className="rounded-md border p-3 bg-amber-500/[0.04] border-amber-500/30">
-            <div className="callsign inline-flex items-center gap-1.5">
-              <Timer className="h-3 w-3" /> Overtime
-            </div>
-            <div className="font-mono text-xl font-semibold text-amber-700 dark:text-amber-400">
-              {formatBND(overtimeTotal)}
-            </div>
-            <div className="text-xs text-muted-foreground mt-0.5">
-              IT &amp; Technical only
-            </div>
+          <div className="font-mono text-xl font-semibold text-emerald-700 dark:text-emerald-400">
+            {formatBND(mealTotal)}
           </div>
-          <div className="rounded-md border p-3">
-            <div className="callsign">Grand total</div>
-            <div className="font-mono text-xl font-semibold">
-              {formatBND(mealTotal + overtimeTotal)}
-            </div>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            BND 5 per AM/PM tick · overtime is entered per shift below
           </div>
         </div>
 
@@ -638,36 +641,17 @@ export function HrEditor({
                           />
                         </td>
                         <td className="px-2 py-1.5">
-                          {/* Plain text input (not type=number) — the
-                              spinner UX on number inputs was making
-                              the field feel unresponsive to typed
-                              digits in some browser builds, and we
-                              validate/coerce numerically on save
-                              anyway. inputMode=decimal still surfaces
-                              the numeric keypad on mobile. */}
+                          {/* Plain text input backed by string state
+                              (no coerce-to-number on every keystroke).
+                              inputMode=decimal still surfaces the
+                              numeric keypad on mobile; parse happens
+                              once at save time. */}
                           <input
                             type="text"
                             inputMode="decimal"
-                            pattern="[0-9]*\.?[0-9]*"
                             placeholder="0.00"
-                            value={
-                              otAmounts[r.slotId] === undefined ||
-                              otAmounts[r.slotId] === 0
-                                ? ""
-                                : String(otAmounts[r.slotId])
-                            }
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              // Allow empty string and partial decimals
-                              // like "5." while typing; parseFloat("5.")
-                              // is 5, which is fine to store.
-                              if (raw === "") {
-                                setOtAmount(r.slotId, 0);
-                              } else {
-                                const n = Number.parseFloat(raw);
-                                setOtAmount(r.slotId, Number.isFinite(n) ? n : 0);
-                              }
-                            }}
+                            value={otAmounts[r.slotId] ?? ""}
+                            onChange={(e) => setOtAmount(r.slotId, e.target.value)}
                             disabled={otLocked}
                             className="flex h-8 w-28 rounded-md border border-input bg-background px-3 py-1 text-sm text-right font-mono shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ml-auto"
                             aria-label={`Overtime amount for ${r.staffName}`}
@@ -700,23 +684,9 @@ export function HrEditor({
                         <input
                           type="text"
                           inputMode="decimal"
-                          pattern="[0-9]*\.?[0-9]*"
                           placeholder="0.00"
-                          value={
-                            otAmounts[r.slotId] === undefined ||
-                            otAmounts[r.slotId] === 0
-                              ? ""
-                              : String(otAmounts[r.slotId])
-                          }
-                          onChange={(e) => {
-                            const raw = e.target.value;
-                            if (raw === "") {
-                              setOtAmount(r.slotId, 0);
-                            } else {
-                              const n = Number.parseFloat(raw);
-                              setOtAmount(r.slotId, Number.isFinite(n) ? n : 0);
-                            }
-                          }}
+                          value={otAmounts[r.slotId] ?? ""}
+                          onChange={(e) => setOtAmount(r.slotId, e.target.value)}
                           disabled={otLocked}
                           className="flex h-9 w-28 pl-10 rounded-md border border-input bg-background px-3 py-1 text-sm text-right font-mono shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                           aria-label={`Overtime amount for ${r.staffName}`}
