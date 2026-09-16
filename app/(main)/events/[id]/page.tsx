@@ -22,7 +22,6 @@ import { canViewBudget, hasRole, isSuperAdmin } from "@/lib/permissions";
 import { getAllUsers } from "@/lib/store";
 import {
   canEditDept,
-  canEditFinance,
   canEditHr,
   canEditHrOvertime,
   visibleDeptKeysForShadow,
@@ -46,7 +45,6 @@ import type { ShadowEventKemsStatus } from "@/lib/shadow-events-types";
 import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
 import { DeptRosterEditor } from "@/components/kotg/dept-roster-editor";
 import { HrEditor, type FlatRosterRow } from "@/components/kotg/hr-editor";
-import { FinanceEditor } from "@/components/kotg/finance-editor";
 import { formatBND, formatDateTime } from "@/lib/utils";
 
 const DEPT_LABEL: Record<string, string> = {
@@ -61,8 +59,11 @@ const DEPT_LABEL: Record<string, string> = {
 const KEMS_STATUS_LABEL: Record<ShadowEventKemsStatus, string> = {
   ACTIVE: "Active — awaiting Managers",
   MANAGERS_IN_PROGRESS: "Managers in progress",
-  HR_UNLOCKED: "HR filling overtime + meal allowance",
-  FINANCE_UNLOCKED: "Finance filling remaining costs",
+  HR_UNLOCKED: "HR filling meal allowance",
+  // FINANCE_UNLOCKED still exists in the type for backward compat but
+  // computeKemsStatus no longer produces it — kept here as a graceful
+  // label in case an older shadow record round-trips through the type.
+  FINANCE_UNLOCKED: "Finance review (legacy)",
   PUBLISHED: "Published",
 };
 
@@ -296,25 +297,13 @@ export default async function EventDetailPage({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {/* Overtime tile removed — HR captures OT amounts by hand
-                on the printed PDF form, not in KEMS. Grand total below
-                is meal + other only. */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <BudgetStat
-                label="Meal allowance (HR)"
-                value={formatBND(budget.mealAllowanceBND)}
-              />
-              <BudgetStat
-                label="Other (Finance)"
-                value={formatBND(budget.otherEstBND)}
-              />
-            </div>
-            <div className="mt-4 pt-4 border-t flex items-center justify-between">
-              <span className="callsign">Grand total (est.)</span>
-              <span className="text-lg font-mono font-semibold text-accent">
-                {formatBND(budget.mealAllowanceBND + budget.otherEstBND)}
-              </span>
-            </div>
+            {/* Only meal allowance is captured digitally now — HR
+                writes OT by hand, and the Finance "other" block was
+                removed from the KEMS workflow entirely. */}
+            <BudgetStat
+              label="Meal allowance (HR)"
+              value={formatBND(budget.mealAllowanceBND)}
+            />
           </CardContent>
         </Card>
       )}
@@ -382,17 +371,11 @@ export default async function EventDetailPage({
           />
         )}
 
-      {/* Finance block editor — appears once FINANCE_UNLOCKED. */}
-      {(shadow.kemsStatus === "FINANCE_UNLOCKED" ||
-        shadow.kemsStatus === "PUBLISHED") &&
-        canViewBudget(user) && (
-          <FinanceEditor
-            bookingId={bookingId}
-            initial={shadow.finance.lines}
-            completed={shadow.finance.completed}
-            readOnly={!canEditFinance(user, shadow.kemsStatus)}
-          />
-        )}
+      {/* Finance block editor removed per HR/GM decision — the workflow
+          now goes Manager rosters → HR → PUBLISHED. Other-cost tracking
+          (equipment / production / marketing) lives outside KEMS. The
+          shadow.finance field is kept in the type contract so existing
+          in-memory records survive round-trips. */}
 
       {/* Program flow — read-only. Editor lands with the roster editor
           work order; for now this just displays whatever's been saved. */}
@@ -435,8 +418,9 @@ export default async function EventDetailPage({
   );
 }
 
-/** Grid of dept-completion chips + HR/Finance chips. Read-only in this
- *  pass — clicking one will open the corresponding editor in a follow-up. */
+/** Grid of dept-completion chips + HR chip. Finance chip removed —
+ *  Finance is no longer part of the KEMS workflow (other-cost tracking
+ *  lives outside KEMS now). */
 function DeptCompletionGrid({
   shadow,
 }: {
@@ -458,23 +442,12 @@ function DeptCompletionGrid({
         );
       })}
       <CompletionChip
-        label="HR (OT + meals)"
+        label="HR (meals)"
         state={
           shadow.hr.completed
             ? "done"
             : shadow.kemsStatus === "HR_UNLOCKED" ||
               shadow.kemsStatus === "FINANCE_UNLOCKED" ||
-              shadow.kemsStatus === "PUBLISHED"
-            ? "in-progress"
-            : "locked"
-        }
-      />
-      <CompletionChip
-        label="Finance (other)"
-        state={
-          shadow.finance.completed
-            ? "done"
-            : shadow.kemsStatus === "FINANCE_UNLOCKED" ||
               shadow.kemsStatus === "PUBLISHED"
             ? "in-progress"
             : "locked"

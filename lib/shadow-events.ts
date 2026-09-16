@@ -182,11 +182,15 @@ export function markFinanceComplete(
 }
 
 /** Derives the KEMS workflow status from the record's completion flags.
- *  Called on every roster/HR/finance write so the status is always in sync
- *  with the underlying data — no separate "advance workflow" step to
- *  forget. The logic is: MANAGERS all done → HR_UNLOCKED; +HR done →
- *  FINANCE_UNLOCKED; +Finance done → PUBLISHED. Any progress before all
- *  managers done keeps us at MANAGERS_IN_PROGRESS or ACTIVE. */
+ *  Called on every roster/HR write so the status is always in sync with
+ *  the underlying data — no separate "advance workflow" step to forget.
+ *
+ *  Workflow is: MANAGERS all done → HR_UNLOCKED; +HR done → PUBLISHED.
+ *  Finance was removed from the workflow (other-cost tracking now lives
+ *  outside KEMS), so HR's "Mark complete" is the terminal step.
+ *
+ *  `record.finance.completed` is retained on the type for schema
+ *  compatibility but no longer affects the derived status. */
 export function computeKemsStatus(record: ShadowEventRecord): ShadowEventKemsStatus {
   const managersDone = MANAGER_DEPT_KEYS.every(
     (k) => record.rosterByDept[k]?.completed === true,
@@ -197,8 +201,7 @@ export function computeKemsStatus(record: ShadowEventRecord): ShadowEventKemsSta
     return r.completed || r.slots.length > 0 || r.staff.length > 0;
   });
 
-  if (record.finance.completed) return "PUBLISHED";
-  if (record.hr.completed) return "FINANCE_UNLOCKED";
+  if (record.hr.completed) return "PUBLISHED";
   if (managersDone) return "HR_UNLOCKED";
   if (managersStarted) return "MANAGERS_IN_PROGRESS";
   return "ACTIVE";

@@ -614,7 +614,7 @@ export function HrEditor({
                   onClick={() => {
                     if (
                       !confirm(
-                        "Mark HR complete? Finance (Putri) will be able to fill her block next; you'll no longer be able to edit meal ticks. (OT amounts can still be adjusted by Finance until publish.)",
+                        "Mark HR complete? This publishes the booking — meal ticks are frozen and no further HR edits are possible.",
                       )
                     ) {
                       return;
