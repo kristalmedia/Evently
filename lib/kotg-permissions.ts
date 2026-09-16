@@ -56,19 +56,45 @@ export function editableDeptForManager(
 
 /** Full authorisation check for editing a specific dept's roster block.
  *  Super Admin can edit any dept; Managers only their own (see rules on
- *  editableDeptForManager). */
+ *  editableDeptForManager).
+ *
+ *  Post-confirmation exception: once kemsStatus reaches PUBLISHED
+ *  (the event is "Confirmed"), ANY Manager, HR, or Super Admin can
+ *  edit ANY dept's roster — this is the last-minute-changes surface
+ *  called out in the spec. The confirmed-event page renders a single
+ *  unified roster table that saves per-dept via this same endpoint. */
 export function canEditDept(
   user: User | null | undefined,
   deptKey: ShadowDeptKey,
   kemsStatus: ShadowEventKemsStatus,
 ): boolean {
   if (!user || user.status === "disabled") return false;
-  if (kemsStatus === "PUBLISHED") return false;
+
+  // Post-confirmation: any Manager / HR / Super Admin can edit any dept.
+  if (kemsStatus === "PUBLISHED") {
+    if (isSuperAdmin(user)) return true;
+    return hasRole(user, "MANAGER") || hasRole(user, "HR");
+  }
+
   if (isSuperAdmin(user)) {
-    // Super Admin can edit any dept, but only until the finance freeze.
+    // Super Admin can edit any dept, but only until the workflow
+    // reaches HR (then the roster freezes for HR to work with) —
+    // resumes above at PUBLISHED for last-minute changes.
     return kemsStatus === "ACTIVE" || kemsStatus === "MANAGERS_IN_PROGRESS";
   }
   return editableDeptForManager(user, kemsStatus) === deptKey;
+}
+
+/** Whether the current user is allowed to edit any confirmed-event
+ *  roster (i.e. after PUBLISHED, from the unified "Who's working"
+ *  table). Convenience wrapper around canEditDept for a UI-side
+ *  render-or-hide check. */
+export function canEditConfirmedRoster(
+  user: User | null | undefined,
+): boolean {
+  if (!user || user.status === "disabled") return false;
+  if (isSuperAdmin(user)) return true;
+  return hasRole(user, "MANAGER") || hasRole(user, "HR");
 }
 
 /** HR can edit their block (meal ticks + "Mark complete" gesture) once

@@ -21,6 +21,7 @@ import { requireSession } from "@/lib/auth";
 import { canViewBudget, hasRole, isSuperAdmin } from "@/lib/permissions";
 import { getAllUsers } from "@/lib/store";
 import {
+  canEditConfirmedRoster,
   canEditDept,
   canEditHr,
   canEditHrOvertime,
@@ -45,6 +46,7 @@ import type { ShadowEventKemsStatus } from "@/lib/shadow-events-types";
 import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
 import { DeptRosterEditor } from "@/components/kotg/dept-roster-editor";
 import { HrEditor, type FlatRosterRow } from "@/components/kotg/hr-editor";
+import { ConfirmedRosterEditor } from "@/components/kotg/confirmed-roster-editor";
 import { formatBND, formatDateTime } from "@/lib/utils";
 
 const DEPT_LABEL: Record<string, string> = {
@@ -154,29 +156,31 @@ export default async function EventDetailPage({
         }
       />
 
-      {/* KEMS workflow banner — where in the per-dept / HR / Finance flow
-          this booking currently sits. Read-only in this pass; editors
-          land in the follow-up work orders. */}
-      <Card className="border-accent/30 bg-accent/[0.04]">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <ClipboardList className="h-4 w-4 text-accent" />
-            KEMS workflow
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="text-sm">
-            <span className="font-medium">{KEMS_STATUS_LABEL[shadow.kemsStatus]}</span>
-            {shadow.activeNotifiedAt && (
-              <span className="text-muted-foreground text-xs ml-2">
-                (all-hands notified{" "}
-                {new Date(shadow.activeNotifiedAt).toLocaleString("en-GB")})
-              </span>
-            )}
-          </div>
-          <DeptCompletionGrid shadow={shadow} />
-        </CardContent>
-      </Card>
+      {/* KEMS workflow banner hides once the booking is Confirmed —
+          from that point on the page shows the unified "Who's working"
+          roster instead of the workflow tracker. */}
+      {shadow.kemsStatus !== "PUBLISHED" && (
+        <Card className="border-accent/30 bg-accent/[0.04]">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ClipboardList className="h-4 w-4 text-accent" />
+              KEMS workflow
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="text-sm">
+              <span className="font-medium">{KEMS_STATUS_LABEL[shadow.kemsStatus]}</span>
+              {shadow.activeNotifiedAt && (
+                <span className="text-muted-foreground text-xs ml-2">
+                  (all-hands notified{" "}
+                  {new Date(shadow.activeNotifiedAt).toLocaleString("en-GB")})
+                </span>
+              )}
+            </div>
+            <DeptCompletionGrid shadow={shadow} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Quick facts — pulled straight from the Sheet booking. */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -308,45 +312,57 @@ export default async function EventDetailPage({
         </Card>
       )}
 
-      {/* Per-dept roster editors — one card per dept this user can see.
-          Managers see only their own (in edit mode); HR sees every dept
-          in read-only mode once the workflow reaches HR_UNLOCKED;
-          Super Admin sees every dept in edit mode until finance freezes. */}
-      {(() => {
-        const visibleDepts = visibleDeptKeysForShadow(user, shadow.kemsStatus);
-        if (visibleDepts.length === 0) return null;
-        return (
-          <div className="space-y-4">
-            <h2 className="text-lg font-semibold">Department rosters</h2>
-            <div className="grid gap-4 lg:grid-cols-2">
-              {visibleDepts.map((deptKey) => {
-                const initial =
-                  shadow.rosterByDept[deptKey] ?? {
-                    completed: false,
-                    slots: [],
-                    staff: [],
-                  };
-                const editable = canEditDept(user, deptKey, shadow.kemsStatus);
-                return (
-                  <DeptRosterEditor
-                    key={deptKey}
-                    bookingId={bookingId}
-                    deptKey={deptKey}
-                    initial={initial}
-                    readOnly={!editable}
-                  />
-                );
-              })}
+      {/* Roster surface — two mutually exclusive shapes:
+            • Pre-confirmation (kemsStatus !== PUBLISHED): per-dept
+              cards, gated by canEditDept, driving the workflow forward.
+            • Confirmed (kemsStatus === PUBLISHED): one unified
+              "Who's working" table, editable by any Manager / HR /
+              Super Admin for last-minute changes. The per-dept
+              breakdown, the workflow banner and the HR editor all
+              step aside so the confirmed-event view stays clean. */}
+      {shadow.kemsStatus === "PUBLISHED" ? (
+        <ConfirmedRosterEditor
+          bookingId={bookingId}
+          rosterByDept={shadow.rosterByDept}
+          canEdit={canEditConfirmedRoster(user)}
+        />
+      ) : (
+        (() => {
+          const visibleDepts = visibleDeptKeysForShadow(user, shadow.kemsStatus);
+          if (visibleDepts.length === 0) return null;
+          return (
+            <div className="space-y-4">
+              <h2 className="text-lg font-semibold">Department rosters</h2>
+              <div className="grid gap-4 lg:grid-cols-2">
+                {visibleDepts.map((deptKey) => {
+                  const initial =
+                    shadow.rosterByDept[deptKey] ?? {
+                      completed: false,
+                      slots: [],
+                      staff: [],
+                    };
+                  const editable = canEditDept(user, deptKey, shadow.kemsStatus);
+                  return (
+                    <DeptRosterEditor
+                      key={deptKey}
+                      bookingId={bookingId}
+                      deptKey={deptKey}
+                      initial={initial}
+                      readOnly={!editable}
+                    />
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()
+      )}
 
-      {/* HR block editor — appears once HR_UNLOCKED. Read-only for
-          non-HR viewers once the block is populated. */}
-      {(shadow.kemsStatus === "HR_UNLOCKED" ||
-        shadow.kemsStatus === "FINANCE_UNLOCKED" ||
-        shadow.kemsStatus === "PUBLISHED") &&
+      {/* HR block editor — appears once HR_UNLOCKED and up until HR
+          marks complete (workflow → PUBLISHED, "Confirmed Event").
+          Post-confirmation the roster becomes the primary surface via
+          ConfirmedRosterEditor above; the HR block is put away. */}
+      {shadow.kemsStatus === "HR_UNLOCKED" &&
         canViewBudget(user) && (
           <HrEditor
             bookingId={bookingId}
