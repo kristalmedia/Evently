@@ -97,6 +97,7 @@ export function HrEditor({
   initialOvertime,
   completed,
   readOnly = false,
+  otReadOnly,
   viewerDiagnostic,
 }: {
   bookingId: string;
@@ -107,7 +108,14 @@ export function HrEditor({
   initialMealTicks: MealTickMap;
   initialOvertime: OvertimeLine[];
   completed: boolean;
+  /** Gates the meal-allowance tick grid, the "Mark complete" button
+   *  and the underlying Save-that-includes-meal path. HR + Super Admin. */
   readOnly?: boolean;
+  /** Gates the overtime amount + notes inputs specifically. Broader
+   *  than readOnly — Finance Lead (Putri) can edit OT during her turn
+   *  even after HR marked the block complete. Defaults to `readOnly`
+   *  when omitted so nothing changes for callers that don't pass it. */
+  otReadOnly?: boolean;
   /** Server-computed diagnostic — displayed in the read-only banner so
    *  the user can see exactly why edits are frozen (role mismatch,
    *  wrong workflow stage, block already completed). Removed once the
@@ -120,6 +128,8 @@ export function HrEditor({
     isHr: boolean;
   };
 }) {
+  // Default otReadOnly to readOnly for backwards compatibility.
+  const otLocked = otReadOnly ?? readOnly;
   const router = useRouter();
   // Seed the ticks state with a time-based auto-classification for
   // any roster slot HR hasn't explicitly ticked yet. That way a fresh
@@ -312,25 +322,36 @@ export function HrEditor({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Explicit read-only banner — the ticks and inputs render but
-            silently ignore clicks when readOnly / completed. Without
-            this, a viewer would rightfully wonder why the checkboxes
-            do nothing. */}
+        {/* Explicit read-only banner — describes what's editable and
+            what isn't for the current viewer.
+              • Fully locked (readOnly + otLocked) → "read-only"
+              • Meal locked, OT open (Finance Lead post-HR-complete) →
+                "OT-only edit" banner explaining the split
+              • HR block completed but viewer is HR → "block completed"
+                note (meal locked, but no misleading full lock message
+                since Finance can still adjust OT). */}
         {(readOnly || completed) && (
           <div className="rounded-md border border-muted bg-muted/30 p-3 text-xs flex items-start gap-2">
             <Lock className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
             <div className="min-w-0 space-y-1">
-              {completed ? (
+              {readOnly && !otLocked ? (
+                <div>
+                  <span className="font-medium">You can edit overtime amounts only.</span>{" "}
+                  Meal-allowance ticks are HR's decision and are locked here;
+                  adjust OT and click Save. Meal ticks will remain whatever HR
+                  set.
+                </div>
+              ) : completed ? (
                 <div>
                   <span className="font-medium">Read-only — HR block completed.</span>{" "}
-                  Ticks and OT rows are frozen. Super Admin can reopen by
-                  editing the shadow record directly.
+                  Meal ticks are frozen. Overtime amounts can still be adjusted
+                  by Finance Lead until the booking is published.
                 </div>
               ) : (
                 <div>
                   <span className="font-medium">Read-only — you don't have HR edit access.</span>{" "}
-                  Only users with the HR role (or Super Admin) can tick meal
-                  allowance / edit overtime on this booking.
+                  Only HR (meal + OT), Finance Lead (OT only, during her turn)
+                  or Super Admin can edit here.
                 </div>
               )}
               {viewerDiagnostic && (
@@ -342,6 +363,7 @@ export function HrEditor({
                   {" · "}kemsStatus={viewerDiagnostic.kemsStatus}
                   {" · "}completed={String(completed)}
                   {" · "}readOnly={String(readOnly)}
+                  {" · "}otLocked={String(otLocked)}
                 </div>
               )}
             </div>
@@ -610,7 +632,7 @@ export function HrEditor({
                             placeholder="Reason / notes"
                             value={otNotes[r.slotId] ?? ""}
                             onChange={(e) => setOtNote(r.slotId, e.target.value)}
-                            disabled={readOnly || completed}
+                            disabled={otLocked}
                             className="h-8 text-sm"
                           />
                         </td>
@@ -627,7 +649,7 @@ export function HrEditor({
                                 Number.parseFloat(e.target.value) || 0,
                               )
                             }
-                            disabled={readOnly || completed}
+                            disabled={otLocked}
                             className="h-8 w-28 text-right font-mono ml-auto"
                             aria-label={`Overtime amount for ${r.staffName}`}
                           />
@@ -668,7 +690,7 @@ export function HrEditor({
                               Number.parseFloat(e.target.value) || 0,
                             )
                           }
-                          disabled={readOnly || completed}
+                          disabled={otLocked}
                           className="h-9 w-28 pl-10 text-right font-mono"
                           aria-label={`Overtime amount for ${r.staffName}`}
                         />
@@ -678,7 +700,7 @@ export function HrEditor({
                       placeholder="Reason / notes"
                       value={otNotes[r.slotId] ?? ""}
                       onChange={(e) => setOtNote(r.slotId, e.target.value)}
-                      disabled={readOnly || completed}
+                      disabled={otLocked}
                       className="text-sm"
                     />
                   </div>
@@ -688,7 +710,12 @@ export function HrEditor({
           )}
         </div>
 
-        {!readOnly && !completed && (
+        {/* Action row is visible whenever ANY editable surface exists —
+            either the HR-owned meal/complete flow (readOnly false) or
+            the shared OT flow (otLocked false). Only HR sees "Mark
+            complete"; Finance Lead sees just "Save" when they came here
+            to adjust OT. */}
+        {(!readOnly || !otLocked) && (
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
             <div className="ml-auto flex items-center gap-2">
               <Button
@@ -701,25 +728,27 @@ export function HrEditor({
                 <Save className="h-3.5 w-3.5" />
                 {busy ? "Saving…" : "Save"}
               </Button>
-              <Button
-                variant="accent"
-                size="sm"
-                onClick={() => {
-                  if (
-                    !confirm(
-                      "Mark HR complete? Finance (Putri) will be able to fill her block next; you'll no longer be able to edit HR ticks or overtime.",
-                    )
-                  ) {
-                    return;
-                  }
-                  put(true);
-                }}
-                disabled={busy}
-                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700"
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Mark complete
-              </Button>
+              {!readOnly && !completed && (
+                <Button
+                  variant="accent"
+                  size="sm"
+                  onClick={() => {
+                    if (
+                      !confirm(
+                        "Mark HR complete? Finance (Putri) will be able to fill her block next; you'll no longer be able to edit meal ticks. (OT amounts can still be adjusted by Finance until publish.)",
+                      )
+                    ) {
+                      return;
+                    }
+                    put(true);
+                  }}
+                  disabled={busy}
+                  className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Mark complete
+                </Button>
+              )}
             </div>
           </div>
         )}

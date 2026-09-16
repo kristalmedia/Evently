@@ -71,8 +71,9 @@ export function canEditDept(
   return editableDeptForManager(user, kemsStatus) === deptKey;
 }
 
-/** HR can edit their block once the workflow reaches HR_UNLOCKED and
- *  until the workflow freezes at PUBLISHED.
+/** HR can edit their block (meal ticks + "Mark complete" gesture) once
+ *  the workflow reaches HR_UNLOCKED and until the workflow freezes at
+ *  PUBLISHED.
  *
  *  Super Admin bypasses ALL the gates here — including the PUBLISHED
  *  freeze — so IT can always fix a mis-typed OT amount or a wrong
@@ -88,6 +89,30 @@ export function canEditHr(
   if (kemsStatus === "PUBLISHED") return false;
   if (!hasRole(user, "HR")) return false;
   return kemsStatus === "HR_UNLOCKED" || kemsStatus === "FINANCE_UNLOCKED";
+}
+
+/** Overtime amounts are a shared concern between HR (who proposes) and
+ *  Finance Lead (who signs off on the money). So Finance Lead can edit
+ *  the OT amounts too during their turn (FINANCE_UNLOCKED), even after
+ *  HR marked its block complete — the "completed" freeze doesn't stop
+ *  Finance from making a last-minute adjustment before publishing.
+ *
+ *  Meal ticks stay HR-only via canEditHr — Finance doesn't get to
+ *  redefine who ate what. */
+export function canEditHrOvertime(
+  user: User | null | undefined,
+  kemsStatus: ShadowEventKemsStatus,
+): boolean {
+  if (!user || user.status === "disabled") return false;
+  if (isSuperAdmin(user)) return true;
+  if (kemsStatus === "PUBLISHED") return false;
+  if (hasRole(user, "HR")) {
+    return kemsStatus === "HR_UNLOCKED" || kemsStatus === "FINANCE_UNLOCKED";
+  }
+  if (hasRole(user, "FINANCE_LEAD")) {
+    return kemsStatus === "FINANCE_UNLOCKED";
+  }
+  return false;
 }
 
 /** Finance Lead (Putri) can edit her block once HR finishes and until

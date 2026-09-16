@@ -24,6 +24,7 @@ import {
   canEditDept,
   canEditFinance,
   canEditHr,
+  canEditHrOvertime,
   visibleDeptKeysForShadow,
 } from "@/lib/kotg-permissions";
 import { getKotgBookingsWithClients } from "@/lib/google-sheets";
@@ -368,6 +369,7 @@ export default async function EventDetailPage({
             initialOvertime={shadow.hr.overtime}
             completed={shadow.hr.completed}
             readOnly={!canEditHr(user, shadow.kemsStatus)}
+            otReadOnly={!canEditHrOvertime(user, shadow.kemsStatus)}
             viewerDiagnostic={{
               role: user.role,
               secondaryRole: user.secondaryRole,

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { canEditHr } from "@/lib/kotg-permissions";
+import { canEditHr, canEditHrOvertime } from "@/lib/kotg-permissions";
 import {
   getOrCreateShadowEvent,
   markHrComplete,
@@ -48,13 +48,31 @@ export async function PUT(
   };
 
   const shadow = getOrCreateShadowEvent(bookingId);
-  if (!canEditHr(user, shadow.kemsStatus)) {
+
+  // Split permission: canEditHr covers meal + complete (HR-only);
+  // canEditHrOvertime is broader and includes Finance Lead during
+  // FINANCE_UNLOCKED so Putri can adjust the OT amounts. A viewer must
+  // hold at least one of them to reach this endpoint.
+  const canMealOrComplete = canEditHr(user, shadow.kemsStatus);
+  const canOt = canEditHrOvertime(user, shadow.kemsStatus);
+  if (!canMealOrComplete && !canOt) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const mealTicks: MealTickMap =
+  const submittedMealTicks: MealTickMap =
     body.mealTicks && typeof body.mealTicks === "object" ? body.mealTicks : {};
-  const overtime: OvertimeLine[] = Array.isArray(body.overtime) ? body.overtime : [];
+  const submittedOvertime: OvertimeLine[] = Array.isArray(body.overtime)
+    ? body.overtime
+    : [];
+
+  // A caller without canEditHr can't alter meal ticks or flip the
+  // completed flag — preserve the server-side truth for those two.
+  const mealTicks = canMealOrComplete ? submittedMealTicks : shadow.hr.mealTicks;
+  // A caller without canEditHrOvertime can't alter OT lines. In
+  // practice this shouldn't happen (the client only shows OT inputs
+  // when the viewer has canOt), but the server is the enforcement
+  // point — never trust the client.
+  const overtime = canOt ? submittedOvertime : shadow.hr.overtime;
 
   const badOt = overtime.find((l) => !OT_ELIGIBLE_DEPTS.includes(l.staffDept));
   if (badOt) {
@@ -70,7 +88,9 @@ export async function PUT(
     hr: { ...shadow.hr, mealTicks, overtime },
   });
 
-  if (body.complete === true) {
+  // Only canEditHr users can mark HR complete; a Finance Lead OT edit
+  // must not implicitly close the HR block on them.
+  if (body.complete === true && canMealOrComplete) {
     next = markHrComplete(bookingId, user.id);
   }
 
@@ -83,7 +103,7 @@ export async function PUT(
     actor: user,
     eventId: bookingId,
     details: `HR saved (${mealCount} meal ticks, ${overtime.length} OT rows${
-      body.complete ? " + marked complete" : ""
+      body.complete && canMealOrComplete ? " + marked complete" : ""
     }; kemsStatus → ${next.kemsStatus})`,
   });
   return NextResponse.json({ shadow: next });
