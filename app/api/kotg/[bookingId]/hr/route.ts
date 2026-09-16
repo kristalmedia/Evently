@@ -11,6 +11,8 @@ import type {
   OvertimeLine,
 } from "@/lib/shadow-events-types";
 import { logAudit } from "@/lib/store";
+import { getKotgBookingsWithClients } from "@/lib/google-sheets";
+import { announceConfirmedEvent } from "@/lib/event-notifications";
 
 /** Departments whose staff are eligible for overtime. Matched
  *  case-sensitively against User.department (values in lib/types.ts). */
@@ -90,8 +92,38 @@ export async function PUT(
 
   // Only canEditHr users can mark HR complete; a Finance Lead OT edit
   // must not implicitly close the HR block on them.
+  //
+  // Fire the "event confirmed" all-hands fan-out ONCE, on the transition
+  // from not-completed → completed. markHrComplete is idempotent so a
+  // repeat call is a no-op on the shadow record, but the notification
+  // would fire again if we keyed off the current flag — hence the
+  // pre-write snapshot below.
+  const wasHrCompleted = shadow.hr.completed;
   if (body.complete === true && canMealOrComplete) {
     next = markHrComplete(bookingId, user.id);
+    if (!wasHrCompleted && next.hr.completed) {
+      // Look up the booking from the Sheet to build the announcement
+      // payload (name, client, venue, dates). If the Sheet fetch fails,
+      // the confirmation still saves — we just skip the email so a
+      // Sheets outage never blocks HR from marking complete.
+      try {
+        const bookings = await getKotgBookingsWithClients();
+        const b = bookings.find((x) => x.booking.BookingID === bookingId);
+        if (b) {
+          void announceConfirmedEvent(b).catch((err) => {
+            console.error(
+              `announceConfirmedEvent failed for ${bookingId}:`,
+              err,
+            );
+          });
+        }
+      } catch (err) {
+        console.error(
+          `Sheet fetch failed for confirmed-event notification ${bookingId}:`,
+          err,
+        );
+      }
+    }
   }
 
   const mealCount = Object.values(mealTicks).reduce(

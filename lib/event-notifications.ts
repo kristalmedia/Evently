@@ -71,3 +71,52 @@ export async function announceActiveBooking(
     await sendEmail({ to: u.email, subject, body });
   }
 }
+
+/**
+ * Confirmed-event fan-out — fires exactly once, when HR marks their
+ * block complete and the booking's KEMS workflow reaches PUBLISHED.
+ *
+ * Caller must gate on the *transition* (not the current flag), i.e.
+ * only invoke this when hr.completed just flipped from false to true.
+ * Firing on every save would spam every user on every meal-tick edit.
+ *
+ * Fan-out is the same three-part shape as announceActiveBooking:
+ *   1. Org-wide in-app broadcast — "Event confirmed".
+ *   2. Fire-and-forget SMTP courtesy email to every active user.
+ *   3. No per-role notification — every role sees the org broadcast.
+ */
+export async function announceConfirmedEvent(
+  booking: KotgBookingWithClient,
+): Promise<void> {
+  const bookingId = booking.booking.BookingID;
+  const displayName =
+    booking.customPackage?.PackageName ||
+    booking.booking.ServiceName ||
+    `KOTG booking ${bookingId}`;
+  const clientName =
+    booking.client?.CompanyName || booking.client?.ClientName || "—";
+  const venue = booking.booking.LocationDetails || "TBC";
+  const start = booking.booking.StartDate || "TBC";
+  const end = booking.booking.EndDate ? ` → ${booking.booking.EndDate}` : "";
+
+  // 1. Org-wide broadcast — "Event confirmed".
+  broadcastNotification({
+    kind: "EVENT_PUBLISHED",
+    title: `Event confirmed: ${displayName}`,
+    body: `${displayName} (${clientName}) is now confirmed. Venue: ${venue}. Dates: ${start}${end}.`,
+    eventId: bookingId,
+  });
+
+  // 2. SMTP courtesy email — fire-and-forget serial send.
+  const recipients = getAllUsers().filter((u) => u.status === "active" && !!u.email);
+  const subject = `Event confirmed: ${displayName}`;
+  const body =
+    `${displayName} (booking ${bookingId}) has been confirmed by HR.\n\n` +
+    `Client: ${clientName}\n` +
+    `Venue: ${venue}\n` +
+    `Dates: ${start}${end}\n\n` +
+    `See details in Evently: /events/${bookingId}\n\n— Kristal Media`;
+  for (const u of recipients) {
+    await sendEmail({ to: u.email, subject, body });
+  }
+}

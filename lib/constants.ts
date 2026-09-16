@@ -38,8 +38,10 @@ export const EVENT_STATUSES: { value: EventStatus; label: string; tone: string }
   { value: "REVISION_REQUIRED", label: "Revision Required", tone: "rose" },
   { value: "APPROVED", label: "Approved", tone: "signal" },
   { value: "STAFFING_IN_PROGRESS", label: "Staffing in Progress", tone: "signal" },
-  { value: "FINANCIAL_REVIEW", label: "Financial Review", tone: "amber" },
-  { value: "PUBLISHED", label: "Published", tone: "emerald" },
+  // FINANCIAL_REVIEW is legacy — no code path produces it now. Kept
+  // in the taxonomy so any stale record surfaces with a sensible label.
+  { value: "FINANCIAL_REVIEW", label: "Financial Review (legacy)", tone: "amber" },
+  { value: "PUBLISHED", label: "Confirmed Event", tone: "emerald" },
   { value: "UPCOMING", label: "Upcoming", tone: "signal" },
   { value: "ONGOING", label: "Ongoing", tone: "onair" },
   { value: "COMPLETED", label: "Completed", tone: "emerald" },

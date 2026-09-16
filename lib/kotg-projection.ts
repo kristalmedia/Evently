@@ -62,10 +62,14 @@ export function mapKotgBookingToEventStatus(
 
   switch (kemsStatus) {
     case "PUBLISHED":
+      // Terminal state after HR marks complete — badge reads
+      // "Confirmed Event" (see EVENT_STATUSES in lib/constants.ts).
       return "PUBLISHED";
     case "HR_UNLOCKED":
     case "FINANCE_UNLOCKED":
-      return "FINANCIAL_REVIEW";
+      // HR (or the legacy Finance step) is finalising staff-related
+      // items — booking is still in an in-progress state.
+      return "STAFFING_IN_PROGRESS";
     case "MANAGERS_IN_PROGRESS":
     case "ACTIVE":
     default:
