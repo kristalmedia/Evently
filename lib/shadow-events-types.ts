@@ -110,6 +110,12 @@ export interface ShadowEventRecord {
    *  fan-out fired. Set once, never cleared — used to avoid double-firing
    *  the notification when the Sheet is refetched. */
   activeNotifiedAt?: string;
+  /** ISO timestamp of when the "event confirmed — all-hands notify"
+   *  fan-out fired. Set once, on the first visit AFTER kemsStatus reaches
+   *  PUBLISHED — the reconciliation loop retries every page load until
+   *  the flag is set, so a Sheet outage or SMTP failure at HR-complete
+   *  time doesn't permanently swallow the announcement. */
+  confirmedNotifiedAt?: string;
   /** Per-department roster records. A key missing here means "not yet
    *  started" — treated the same as `completed: false` with empty slots. */
   rosterByDept: Partial<Record<ShadowDeptKey, DeptRoster>>;

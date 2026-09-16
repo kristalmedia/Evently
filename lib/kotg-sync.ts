@@ -1,8 +1,13 @@
 import type { KotgBookingWithClient } from "./google-sheets-types";
-import { announceActiveBooking } from "./event-notifications";
+import {
+  announceActiveBooking,
+  announceConfirmedEvent,
+} from "./event-notifications";
 import {
   getOrCreateShadowEvent,
+  getShadowEvent,
   markActiveNotified,
+  markConfirmedNotified,
   purgeMissingShadowEvents,
 } from "./shadow-events";
 
@@ -29,36 +34,54 @@ import {
  */
 export function reconcileKotgBookings(
   bookings: KotgBookingWithClient[],
-): { newlyNotified: number; purged: number } {
+): { newlyNotified: number; newlyConfirmed: number; purged: number } {
   const active = bookings.filter(
     (b) => b.booking.Status.trim().toLowerCase() === "active",
   );
 
   let newlyNotified = 0;
+  let newlyConfirmed = 0;
   const pending: Promise<void>[] = [];
   for (const b of active) {
     const bookingId = b.booking.BookingID;
     if (!bookingId) continue;
     // Lazy-init so any subsequent read from getShadowEvent finds a record.
     getOrCreateShadowEvent(bookingId);
-    const fired = markActiveNotified(bookingId);
-    if (fired) {
+
+    // Active-status fan-out — fires once per booking on first transition
+    // to Active.
+    const firedActive = markActiveNotified(bookingId);
+    if (firedActive) {
       newlyNotified += 1;
-      // Kick off the fan-out but don't block the caller — the shadow flag
-      // was already set atomically above, so a slow email send doesn't risk
-      // re-firing on a concurrent request.
       pending.push(
         announceActiveBooking(b).catch((err) => {
-          // Swallow — logged via sendEmail, and re-throwing here would only
-          // reach an unhandled-rejection handler. The user-visible booking
-          // still appears; only the notification's absence would be the
-          // consequence.
           console.error(
             `announceActiveBooking failed for booking ${bookingId}:`,
             err,
           );
         }),
       );
+    }
+
+    // Confirmed-event fan-out — fires once per booking when kemsStatus
+    // reaches PUBLISHED. Checked on EVERY reconcile so a Sheet outage
+    // or SMTP failure at HR-complete time doesn't permanently lose the
+    // email; the next page load retries until markConfirmedNotified
+    // finally flips the flag.
+    const shadow = getShadowEvent(bookingId);
+    if (shadow && shadow.kemsStatus === "PUBLISHED") {
+      const firedConfirmed = markConfirmedNotified(bookingId);
+      if (firedConfirmed) {
+        newlyConfirmed += 1;
+        pending.push(
+          announceConfirmedEvent(b).catch((err) => {
+            console.error(
+              `announceConfirmedEvent failed for booking ${bookingId}:`,
+              err,
+            );
+          }),
+        );
+      }
     }
   }
 
@@ -71,5 +94,5 @@ export function reconcileKotgBookings(
   const activeBookingIds = new Set(bookings.map((b) => b.booking.BookingID).filter(Boolean));
   const purged = purgeMissingShadowEvents(activeBookingIds);
 
-  return { newlyNotified, purged };
+  return { newlyNotified, newlyConfirmed, purged };
 }

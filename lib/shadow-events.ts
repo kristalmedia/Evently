@@ -136,6 +136,16 @@ export function markActiveNotified(bookingId: string): boolean {
   return true;
 }
 
+/** Same shape as markActiveNotified, but for the confirmed-event fan-out
+ *  that fires on the transition to PUBLISHED. Idempotent: caller can
+ *  re-run on every Sheet refetch and the fan-out only fires once. */
+export function markConfirmedNotified(bookingId: string): boolean {
+  const current = getOrCreateShadowEvent(bookingId);
+  if (current.confirmedNotifiedAt) return false;
+  updateShadowEvent(bookingId, { confirmedNotifiedAt: new Date().toISOString() });
+  return true;
+}
+
 /** Flags HR's block complete and advances the workflow. Idempotent. */
 export function markHrComplete(
   bookingId: string,

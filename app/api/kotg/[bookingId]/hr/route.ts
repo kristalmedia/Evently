@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { canEditHr, canEditHrOvertime } from "@/lib/kotg-permissions";
 import {
   getOrCreateShadowEvent,
+  markConfirmedNotified,
   markHrComplete,
   updateShadowEvent,
 } from "@/lib/shadow-events";
@@ -92,20 +93,15 @@ export async function PUT(
 
   // Only canEditHr users can mark HR complete; a Finance Lead OT edit
   // must not implicitly close the HR block on them.
-  //
-  // Fire the "event confirmed" all-hands fan-out ONCE, on the transition
-  // from not-completed → completed. markHrComplete is idempotent so a
-  // repeat call is a no-op on the shadow record, but the notification
-  // would fire again if we keyed off the current flag — hence the
-  // pre-write snapshot below.
-  const wasHrCompleted = shadow.hr.completed;
   if (body.complete === true && canMealOrComplete) {
     next = markHrComplete(bookingId, user.id);
-    if (!wasHrCompleted && next.hr.completed) {
-      // Look up the booking from the Sheet to build the announcement
-      // payload (name, client, venue, dates). If the Sheet fetch fails,
-      // the confirmation still saves — we just skip the email so a
-      // Sheets outage never blocks HR from marking complete.
+
+    // Immediate "event confirmed" fan-out attempt. Guarded by
+    // markConfirmedNotified so it only fires once per booking — and
+    // safely coexists with the reconciliation-loop retry in
+    // lib/kotg-sync.ts, which fires on the next page visit if this
+    // attempt fails or if HR marked complete before this code shipped.
+    if (next.kemsStatus === "PUBLISHED" && markConfirmedNotified(bookingId)) {
       try {
         const bookings = await getKotgBookingsWithClients();
         const b = bookings.find((x) => x.booking.BookingID === bookingId);
@@ -118,6 +114,8 @@ export async function PUT(
           });
         }
       } catch (err) {
+        // Sheet outage — reconcile will retry on next visit since the
+        // flag was set atomically above. Nothing to unwind.
         console.error(
           `Sheet fetch failed for confirmed-event notification ${bookingId}:`,
           err,
