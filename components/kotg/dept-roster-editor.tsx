@@ -14,6 +14,7 @@ import type {
   ShadowDeptKey,
 } from "@/lib/shadow-events-types";
 import type { RosterSlot } from "@/lib/types";
+import { apiPath } from "@/lib/api-path";
 
 const DEPT_LABEL: Record<ShadowDeptKey, string> = {
   SALES: "Sales",
@@ -104,7 +105,7 @@ export function DeptRosterEditor({
   async function put(complete: boolean) {
     setBusy(true);
     try {
-      const res = await fetch(`/api/kotg/${bookingId}/roster`, {
+      const res = await fetch(apiPath(`/api/kotg/${bookingId}/roster`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

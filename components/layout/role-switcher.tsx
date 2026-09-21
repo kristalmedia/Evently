@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { ROLE_LABEL } from "@/lib/permissions";
 import type { User } from "@/lib/types";
 import { useSessionStore } from "@/stores/session-store";
+import { apiPath } from "@/lib/api-path";
 
 /**
  * Development-only role switcher.
@@ -31,7 +32,7 @@ export function RoleSwitcher() {
   // Hydrate from the unauthenticated dev endpoint so the switcher works for every role.
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/dev/seed-users")
+    fetch(apiPath("/api/dev/seed-users"))
       .then((r) => (r.ok ? r.json() : { users: [] }))
       .then(({ users }) => !cancelled && setUsers(users ?? []))
       .catch(() => !cancelled && setUsers([]));
@@ -43,7 +44,7 @@ export function RoleSwitcher() {
   async function switchTo(userId: string) {
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch(apiPath("/api/auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId }),

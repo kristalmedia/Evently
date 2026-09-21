@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useDirectoryUsers } from "@/hooks/use-directory-users";
 import type { ShadowDeptKey, ShadowEventRecord } from "@/lib/shadow-events-types";
 import type { RosterSlot } from "@/lib/types";
+import { apiPath } from "@/lib/api-path";
 
 /** Manager-owned dept keys — matches MANAGER_DEPT_KEYS in
  *  lib/shadow-events.ts (importing that module here would drag the
@@ -174,7 +175,7 @@ export function ConfirmedRosterEditor({
       for (const [deptKey, slots] of grouped.entries()) {
         const existing = rosterByDept[deptKey];
         puts.push(
-          fetch(`/api/kotg/${bookingId}/roster`, {
+          fetch(apiPath(`/api/kotg/${bookingId}/roster`), {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

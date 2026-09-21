@@ -20,6 +20,7 @@ import {
 import { EmptyState } from "@/components/shared/empty-state";
 import { isVisibleBookingStatus } from "@/lib/kotg-projection";
 import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
+import { apiPath } from "@/lib/api-path";
 
 /** Whether this viewer is allowed to see the Contact column. Kept
  *  narrow per the spec: Sales dept + Super Admin only — even CCM Admins
@@ -64,7 +65,7 @@ export function KotgBookingsView({
   async function refresh() {
     setRefreshing(true);
     try {
-      const res = await fetch("/api/integrations/kotg-bookings?refresh=1", {
+      const res = await fetch(apiPath("/api/integrations/kotg-bookings?refresh=1"), {
         cache: "no-store",
       });
       const data = await res.json();

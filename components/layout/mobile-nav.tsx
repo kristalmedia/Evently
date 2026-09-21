@@ -10,6 +10,7 @@ import { KristalWordmark } from "./kristal-mark";
 import { SidebarNav, useSidebarData } from "./sidebar";
 import { useSessionStore } from "@/stores/session-store";
 import { ROLE_LABEL } from "@/lib/permissions";
+import { apiPath } from "@/lib/api-path";
 
 /** Drop /profile and /notifications from the drawer nav — they're already surfaced as top shortcuts. */
 function filterDuplicateShortcuts<T extends { href: string }>(
@@ -73,7 +74,7 @@ export function MobileNav() {
     let cancelled = false;
     async function tick() {
       try {
-        const res = await fetch("/api/notifications/count", { cache: "no-store" });
+        const res = await fetch(apiPath("/api/notifications/count"), { cache: "no-store" });
         if (!res.ok) return;
         const d = (await res.json()) as { count?: number };
         if (!cancelled) setUnread(d.count ?? 0);

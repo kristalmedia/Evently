@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useSessionStore } from "@/stores/session-store";
+import { apiPath } from "@/lib/api-path";
 
 /**
  * First-login welcome modal. Fires automatically for any signed-in user
@@ -51,7 +52,7 @@ export function OnboardingModal() {
   async function dismiss() {
     setOpen(false);
     try {
-      const res = await fetch("/api/users/me/onboarding", { method: "POST" });
+      const res = await fetch(apiPath("/api/users/me/onboarding"), { method: "POST" });
       if (!res.ok) throw new Error("Failed to save preference");
       const { user: updated } = await res.json();
       // Reflect the timestamp on the client store so the modal doesn't

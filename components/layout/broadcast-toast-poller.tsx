@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { PartyPopper } from "lucide-react";
+import { apiPath } from "@/lib/api-path";
 
 interface PendingToast {
   id: string;
@@ -30,7 +31,7 @@ export function BroadcastToastPoller() {
 
     async function tick() {
       try {
-        const res = await fetch("/api/notifications/toasts", {
+        const res = await fetch(apiPath("/api/notifications/toasts"), {
           cache: "no-store",
         });
         if (!res.ok) return;
@@ -50,7 +51,7 @@ export function BroadcastToastPoller() {
               ? {
                   label: "View event",
                   onClick: () => {
-                    window.location.href = `/events/${t.eventId}`;
+                    window.location.href = apiPath(`/events/${t.eventId}`);
                   },
                 }
               : undefined,
@@ -58,7 +59,7 @@ export function BroadcastToastPoller() {
         }
 
         // Mark server-side so other tabs / sessions don't re-fire.
-        await fetch("/api/notifications/toasts", {
+        await fetch(apiPath("/api/notifications/toasts"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ids: fresh.map((t) => t.id) }),

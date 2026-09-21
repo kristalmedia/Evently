@@ -22,6 +22,7 @@ import type {
 } from "@/lib/shadow-events-types";
 import { formatBND } from "@/lib/utils";
 import { exportHrCsv, exportHrPdf, type HrExportBundle } from "@/lib/hr-export";
+import { apiPath } from "@/lib/api-path";
 
 /** One row of the flat cross-dept roster the HR editor works from —
  *  every roster slot from every department, with the staff user
@@ -205,7 +206,7 @@ export function HrEditor({
   async function put(complete: boolean) {
     setBusy(true);
     try {
-      const res = await fetch(`/api/kotg/${bookingId}/hr`, {
+      const res = await fetch(apiPath(`/api/kotg/${bookingId}/hr`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

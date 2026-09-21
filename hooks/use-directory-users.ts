@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiPath } from "@/lib/api-path";
 
 /** Lightweight shape returned by /api/users/directory. */
 export interface DirectoryUser {
@@ -28,7 +29,7 @@ let inflight: Promise<DirectoryUser[]> | null = null;
 async function fetchDirectory(): Promise<DirectoryUser[]> {
   if (cache) return cache;
   if (inflight) return inflight;
-  inflight = fetch("/api/users/directory", { cache: "no-store" })
+  inflight = fetch(apiPath("/api/users/directory"), { cache: "no-store" })
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Directory fetch failed"))))
     .then((data: { users: DirectoryUser[] }) => {
       cache = data.users;

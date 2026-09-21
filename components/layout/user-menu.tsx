@@ -16,6 +16,7 @@ import {
 import { ROLE_LABEL } from "@/lib/permissions";
 import { initials } from "@/lib/utils";
 import { useSessionStore } from "@/stores/session-store";
+import { apiPath } from "@/lib/api-path";
 
 export function UserMenu() {
   const router = useRouter();
@@ -23,7 +24,7 @@ export function UserMenu() {
   if (!user) return null;
 
   async function handleSignOut() {
-    const res = await fetch("/api/auth/logout", { method: "POST" });
+    const res = await fetch(apiPath("/api/auth/logout"), { method: "POST" });
     const { wasEntraSession } = await res.json().catch(() => ({ wasEntraSession: false }));
     useSessionStore.getState().clear();
 
@@ -33,7 +34,7 @@ export function UserMenu() {
     // Without this, "Sign in with Microsoft" next time silently re-uses the
     // still-active Microsoft session instead of prompting fresh credentials.
     if (wasEntraSession) {
-      const postLogoutRedirectUri = `${window.location.origin}/login`;
+      const postLogoutRedirectUri = `${window.location.origin}${apiPath("/login")}`;
       window.location.href = `https://login.microsoftonline.com/common/oauth2/v2.0/logout?post_logout_redirect_uri=${encodeURIComponent(postLogoutRedirectUri)}`;
       return;
     }

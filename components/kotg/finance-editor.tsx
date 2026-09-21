@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { FinanceFinancialLine } from "@/lib/shadow-events-types";
 import { formatBND } from "@/lib/utils";
+import { apiPath } from "@/lib/api-path";
 
 function makeId(): string {
   return `fnl_${Math.random().toString(36).slice(2, 10)}`;
@@ -56,7 +57,7 @@ export function FinanceEditor({
   async function put(complete: boolean) {
     setBusy(true);
     try {
-      const res = await fetch(`/api/kotg/${bookingId}/finance`, {
+      const res = await fetch(apiPath(`/api/kotg/${bookingId}/finance`), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lines, complete }),

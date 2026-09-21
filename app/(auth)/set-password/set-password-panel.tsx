@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { KristalMark } from "@/components/layout/kristal-mark";
+import { apiPath } from "@/lib/api-path";
 
 export function SetPasswordPanel({
   token,
@@ -38,7 +39,7 @@ export function SetPasswordPanel({
     }
     setPending(true);
     try {
-      const res = await fetch("/api/auth/set-password", {
+      const res = await fetch(apiPath("/api/auth/set-password"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, password }),

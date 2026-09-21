@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { apiPath } from "@/lib/api-path";
 
 const POLL_INTERVAL_MS = 10_000;
 
@@ -15,7 +16,7 @@ export function NotificationBell() {
 
     async function fetchCount() {
       try {
-        const res = await fetch("/api/notifications/count", { cache: "no-store" });
+        const res = await fetch(apiPath("/api/notifications/count"), { cache: "no-store" });
         if (!res.ok) return;
         const data = (await res.json()) as { count?: number };
         if (!cancelled) setCount(data.count ?? 0);

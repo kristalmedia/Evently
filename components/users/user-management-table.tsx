@@ -49,6 +49,7 @@ import { ROLE_LABEL } from "@/lib/permissions";
 import { formatDate, initials } from "@/lib/utils";
 import { useSessionStore } from "@/stores/session-store";
 import type { Department, Role, User } from "@/lib/types";
+import { apiPath } from "@/lib/api-path";
 
 const DEPARTMENTS: Department[] = [
   "Sales",
@@ -119,7 +120,7 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
     role: Role;
     jobTitle?: string;
   }) {
-    const res = await fetch("/api/users", {
+    const res = await fetch(apiPath("/api/users"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
@@ -152,7 +153,7 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
   }
 
   async function handleResend(userId: string) {
-    const res = await fetch(`/api/users/invite/resend?id=${userId}`, {
+    const res = await fetch(apiPath(`/api/users/invite/resend?id=${userId}`), {
       method: "POST",
     });
     if (!res.ok) {
@@ -196,7 +197,7 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
     if (!deleteTarget) return;
     setDeleteBusy(true);
     try {
-      const res = await fetch(`/api/users?id=${deleteTarget.id}`, {
+      const res = await fetch(apiPath(`/api/users?id=${deleteTarget.id}`), {
         method: "DELETE",
       });
       if (!res.ok) {
@@ -227,7 +228,7 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
       toast.error("Secondary role must differ from primary role");
       return;
     }
-    const res = await fetch(`/api/users/${id}`, {
+    const res = await fetch(apiPath(`/api/users/${id}`), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

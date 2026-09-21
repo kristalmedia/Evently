@@ -6,6 +6,7 @@ import { FlaskConical, LogIn, Radio, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { apiPath } from "@/lib/api-path";
 import { authClient } from "@/lib/auth-client";
 import {
   Select,
@@ -35,7 +36,7 @@ export function LoginPanel({ users }: { users: User[] }) {
     if (!selectedId) return;
     setPending(true);
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch(apiPath("/api/auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userId: selectedId }),
