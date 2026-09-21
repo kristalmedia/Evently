@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { apiPath } from "@/lib/api-path";
 import { authClient } from "@/lib/auth-client";
+import { TEST_LOGIN_ENABLED } from "@/lib/test-login";
 import {
   Select,
   SelectContent,
@@ -120,7 +121,7 @@ export function LoginPanel({ users }: { users: User[] }) {
             </h2>
             <p className="text-sm text-muted-foreground">
               Sign in with your <span className="font-mono">@kristal.media</span>{" "}
-              Microsoft account, or use the test environment below.
+              Microsoft account{TEST_LOGIN_ENABLED ? ", or use the test environment below" : ""}.
             </p>
           </div>
 
@@ -137,76 +138,80 @@ export function LoginPanel({ users }: { users: User[] }) {
             <span className="flex-1 text-left">Sign in with Microsoft</span>
           </Button>
 
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center">
-              <span className="bg-background px-3 text-xs text-muted-foreground uppercase tracking-widest font-mono">
-                Or continue in test environment
-              </span>
-            </div>
-          </div>
+          {TEST_LOGIN_ENABLED && (
+            <>
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center">
+                  <span className="bg-background px-3 text-xs text-muted-foreground uppercase tracking-widest font-mono">
+                    Or continue in test environment
+                  </span>
+                </div>
+              </div>
 
-          <div className="rounded-lg border-2 border-dashed border-amber-500/40 bg-amber-500/5 p-4 space-y-3">
-            <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
-              <FlaskConical className="h-4 w-4" />
-              <span className="text-xs font-mono uppercase tracking-widest font-semibold">
-                Test environment
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Sign in as a seeded test user — no Microsoft account required.
-              Use this to explore KEMS before Entra ID SSO is configured.
-            </p>
+              <div className="rounded-lg border-2 border-dashed border-amber-500/40 bg-amber-500/5 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                  <FlaskConical className="h-4 w-4" />
+                  <span className="text-xs font-mono uppercase tracking-widest font-semibold">
+                    Test environment
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Sign in as a seeded test user — no Microsoft account required.
+                  Use this to explore KEMS before Entra ID SSO is configured.
+                </p>
 
-            <div className="space-y-2">
-              <Label htmlFor="user-select" className="text-xs">
-                Seeded user
-              </Label>
-              <Select value={selectedId} onValueChange={setSelectedId}>
-                <SelectTrigger id="user-select" className="bg-background">
-                  <SelectValue placeholder="Choose a user…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(grouped).map(([dept, list]) => (
-                    <SelectGroup key={dept}>
-                      <div className="px-2 py-1 callsign">{dept}</div>
-                      {list.map((u) => (
-                        <SelectItem key={u.id} value={u.id}>
-                          <div className="flex flex-col items-start">
-                            <span className="truncate">{u.fullName}</span>
-                            <span className="text-[0.7rem] text-muted-foreground">
-                              {ROLE_LABEL[u.role]}
-                            </span>
-                          </div>
-                        </SelectItem>
+                <div className="space-y-2">
+                  <Label htmlFor="user-select" className="text-xs">
+                    Seeded user
+                  </Label>
+                  <Select value={selectedId} onValueChange={setSelectedId}>
+                    <SelectTrigger id="user-select" className="bg-background">
+                      <SelectValue placeholder="Choose a user…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(grouped).map(([dept, list]) => (
+                        <SelectGroup key={dept}>
+                          <div className="px-2 py-1 callsign">{dept}</div>
+                          {list.map((u) => (
+                            <SelectItem key={u.id} value={u.id}>
+                              <div className="flex flex-col items-start">
+                                <span className="truncate">{u.fullName}</span>
+                                <span className="text-[0.7rem] text-muted-foreground">
+                                  {ROLE_LABEL[u.role]}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
                       ))}
-                    </SelectGroup>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            <Button
-              className="w-full gap-2"
-              size="lg"
-              variant="accent"
-              onClick={signIn}
-              disabled={pending || !selectedId}
-            >
-              <LogIn className="h-4 w-4" />
-              {pending ? "Signing in…" : "Enter test environment"}
-            </Button>
-          </div>
+                <Button
+                  className="w-full gap-2"
+                  size="lg"
+                  variant="accent"
+                  onClick={signIn}
+                  disabled={pending || !selectedId}
+                >
+                  <LogIn className="h-4 w-4" />
+                  {pending ? "Signing in…" : "Enter test environment"}
+                </Button>
+              </div>
 
-          <div className="flex items-center gap-2 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
-            <ShieldCheck className="h-4 w-4 shrink-0 text-accent" />
-            <span>
-              Mock auth. Swap to real Microsoft Entra ID in{" "}
-              <code className="font-mono">lib/auth.ts</code> for production.
-            </span>
-          </div>
+              <div className="flex items-center gap-2 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+                <ShieldCheck className="h-4 w-4 shrink-0 text-accent" />
+                <span>
+                  Mock auth. Swap to real Microsoft Entra ID in{" "}
+                  <code className="font-mono">lib/auth.ts</code> for production.
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

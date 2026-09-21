@@ -7,6 +7,7 @@ import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
 import { NotificationBell } from "./notification-bell";
 import { MobileNav } from "./mobile-nav";
+import { TEST_LOGIN_ENABLED } from "@/lib/test-login";
 
 export function Topbar() {
   return (
@@ -21,10 +22,13 @@ export function Topbar() {
       </div>
 
       <div className="ml-auto flex items-center gap-0.5 sm:gap-2 min-w-0">
-        {/* Dev role switcher — hidden on very small screens to declutter */}
-        <div className="hidden sm:block">
-          <RoleSwitcher />
-        </div>
+        {/* Dev role switcher — hidden on very small screens to declutter, and
+            fully hidden in real production builds (see lib/test-login.ts). */}
+        {TEST_LOGIN_ENABLED && (
+          <div className="hidden sm:block">
+            <RoleSwitcher />
+          </div>
+        )}
         <ThemeToggle />
         {/* Notification bell is duplicated inside the mobile drawer, so hide here below sm */}
         <div className="hidden sm:block">
