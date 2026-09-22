@@ -1,12 +1,17 @@
 import { PageHeader } from "@/components/shared/page-header";
 import { EventsCalendar } from "@/components/events/events-calendar";
+import { UnscheduledBookingsStrip } from "@/components/events/unscheduled-bookings-strip";
 import { requireSession } from "@/lib/auth";
 import { getKotgBookingsWithClients } from "@/lib/google-sheets";
 import { reconcileKotgBookings } from "@/lib/kotg-sync";
 import {
   filterVisibleBookings,
+  inferKotgCategory,
+  kotgDisplayTitle,
+  mapKotgBookingToEventStatus,
   projectKotgCalendarItem,
 } from "@/lib/kotg-projection";
+import { getShadowEvent } from "@/lib/shadow-events";
 import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
 
 export default async function CalendarPage() {
@@ -23,12 +28,25 @@ export default async function CalendarPage() {
     bookings = [];
   }
 
-  const items = bookings
-    // Drop bookings with no StartDate — FullCalendar can't place them and
-    // an "unscheduled" chip in the calendar view would be more confusing
-    // than helpful; those bookings still appear in the KOTG list.
+  // Split by whether the booking has a start date. FullCalendar can only
+  // render items that carry a date; bookings without one get their own
+  // "Unscheduled" strip above so they don't silently disappear from view.
+  const scheduled = bookings
     .filter((b) => !!b.booking.StartDate)
     .map(projectKotgCalendarItem);
+
+  const unscheduled = bookings
+    .filter((b) => !b.booking.StartDate)
+    .map((b) => ({
+      id: b.booking.BookingID,
+      title: kotgDisplayTitle(b),
+      status: mapKotgBookingToEventStatus(
+        b.booking.Status,
+        getShadowEvent(b.booking.BookingID)?.kemsStatus,
+      ),
+      category: inferKotgCategory(b),
+      venue: b.booking.LocationDetails || undefined,
+    }));
 
   return (
     <div className="space-y-6">
@@ -37,7 +55,8 @@ export default async function CalendarPage() {
         title="Calendar"
         description="Every KOTG booking from the Sales sheet, colour-coded by category. Filter above; hover for a preview."
       />
-      <EventsCalendar events={items} />
+      <UnscheduledBookingsStrip items={unscheduled} />
+      <EventsCalendar events={scheduled} />
     </div>
   );
 }

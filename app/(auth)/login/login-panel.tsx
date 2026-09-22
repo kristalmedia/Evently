@@ -27,6 +27,7 @@ export function LoginPanel({ users }: { users: User[] }) {
   const router = useRouter();
   const [selectedId, setSelectedId] = useState(users[0]?.id ?? "");
   const [pending, setPending] = useState(false);
+  const [msPending, setMsPending] = useState(false);
 
   const grouped = users.reduce<Record<string, User[]>>((acc, u) => {
     (acc[u.department] ??= []).push(u);
@@ -52,6 +53,28 @@ export function LoginPanel({ users }: { users: User[] }) {
       toast.error("Sign-in failed. Try another user.");
     } finally {
       setPending(false);
+    }
+  }
+
+  async function signInWithMicrosoft() {
+    setMsPending(true);
+    try {
+      const { error } = await authClient.signIn.social({
+        provider: "microsoft",
+        callbackURL: apiPath("/dashboard"),
+      });
+      // On success this call navigates the browser away to Microsoft's sign-in
+      // page and never resolves normally — so reaching here with no error
+      // means the request itself failed before it could redirect (e.g. an
+      // incognito cookie block, or a misconfigured Entra ID app registration).
+      if (error) {
+        toast.error(error.message ?? "Couldn't start Microsoft sign-in. Check the browser console.");
+      }
+    } catch (err) {
+      toast.error("Couldn't start Microsoft sign-in. Check the browser console.");
+      console.error(err);
+    } finally {
+      setMsPending(false);
     }
   }
 
@@ -130,12 +153,13 @@ export function LoginPanel({ users }: { users: User[] }) {
             variant="outline"
             size="lg"
             className="w-full gap-3 justify-start"
-            onClick={() =>
-              authClient.signIn.social({ provider: "microsoft", callbackURL: "/dashboard" })
-            }
+            onClick={signInWithMicrosoft}
+            disabled={msPending}
           >
             <MicrosoftLogo />
-            <span className="flex-1 text-left">Sign in with Microsoft</span>
+            <span className="flex-1 text-left">
+              {msPending ? "Redirecting…" : "Sign in with Microsoft"}
+            </span>
           </Button>
 
           {TEST_LOGIN_ENABLED && (

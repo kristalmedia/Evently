@@ -6,6 +6,7 @@ import {
   sendEmail,
 } from "./store";
 import { hasRole } from "./permissions";
+import { publicUrl } from "./public-url";
 
 /**
  * Sheet-sourced fan-out helper — fires when a KOTG booking transitions to
@@ -61,12 +62,15 @@ export async function announceActiveBooking(
   // 3. SMTP courtesy email — fire-and-forget serial send.
   const recipients = getAllUsers().filter((u) => u.status === "active" && !!u.email);
   const subject = `New KOTG booking: ${displayName}`;
+  const link = publicUrl(`/events/${bookingId}`);
   const body =
     `${displayName} (booking ${bookingId}) is now Active.\n\n` +
     `Client: ${clientName}\n` +
     `Venue: ${venue}\n` +
     `Dates: ${start}${end}\n\n` +
-    `See details in KEMS: /events/${bookingId}\n\n— Kristal Media`;
+    `View this booking in Evently:\n${link}\n\n` +
+    `You'll be asked to sign in with your @kristal.media Microsoft account if you aren't already.\n\n` +
+    `— Kristal Media`;
   for (const u of recipients) {
     await sendEmail({ to: u.email, subject, body });
   }
@@ -110,12 +114,15 @@ export async function announceConfirmedEvent(
   // 2. SMTP courtesy email — fire-and-forget serial send.
   const recipients = getAllUsers().filter((u) => u.status === "active" && !!u.email);
   const subject = `Event confirmed: ${displayName}`;
+  const link = publicUrl(`/events/${bookingId}`);
   const body =
     `${displayName} (booking ${bookingId}) has been confirmed by HR.\n\n` +
     `Client: ${clientName}\n` +
     `Venue: ${venue}\n` +
     `Dates: ${start}${end}\n\n` +
-    `See details in Evently: /events/${bookingId}\n\n— Kristal Media`;
+    `View this event in Evently:\n${link}\n\n` +
+    `You'll be asked to sign in with your @kristal.media Microsoft account if you aren't already.\n\n` +
+    `— Kristal Media`;
   for (const u of recipients) {
     await sendEmail({ to: u.email, subject, body });
   }
