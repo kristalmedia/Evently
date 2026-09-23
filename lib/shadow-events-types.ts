@@ -5,12 +5,12 @@ import type {
 } from "./types";
 
 /**
- * KEMS "shadow event" — the KEMS-only fields layered on top of a Sheet
+ * Evently "shadow event" — the Evently-only fields layered on top of a Sheet
  * booking. The Sheet (ServiceBookings + Clients + CustomPackages) is the
  * source of truth for the booking itself (dates, client, price, location,
- * status). This shadow record holds everything KEMS adds on top:
+ * status). This shadow record holds everything Evently adds on top:
  * per-department rosters, HR overtime/meals, other financial lines,
- * program flow, and the KEMS-internal workflow position.
+ * program flow, and the Evently-internal workflow position.
  *
  * Keyed by BookingID from the Sheet (see lib/google-sheets-types.ts) —
  * that's the join field. A booking is only a shadow record's identity;
@@ -18,10 +18,10 @@ import type {
  * collected if the Sheet row is later removed).
  */
 
-/** KEMS-side workflow position for one booking's shadow record.
+/** Evently-side workflow position for one booking's shadow record.
  *  Separate from the Sheet's own `Status` column (which is the Sales team's
  *  booking-lifecycle status: Pending / Active / Completed / Cancelled). */
-export type ShadowEventKemsStatus =
+export type ShadowEventEventlyStatus =
   /** Booking is Active in the Sheet, everyone has been notified, and
    *  Managers can start filling their department's rosters. */
   | "ACTIVE"
@@ -77,11 +77,26 @@ export interface FinanceFinancialLine {
   notes?: string;
 }
 
+/** Explicit publish state for a department's roster block.
+ *  "DRAFT" — the Manager can freely save progress; nothing has gone out
+ *  to assigned staff and the overall Evently workflow doesn't advance.
+ *  "PUBLISHED" — the block was submitted (`completed: true`); kept as a
+ *  distinct field (rather than only inferring it from `completed`) so
+ *  the publish state is explicit in the schema, not just a side-effect
+ *  of a boolean's name. The two fields are always written together —
+ *  see setDeptRoster in lib/shadow-events.ts, the sole write path. */
+export type DeptRosterStatus = "DRAFT" | "PUBLISHED";
+
 /** Per-department roster block. Each department fills their own; other
  *  departments only see it read-only (HR sees all once HR_UNLOCKED). */
 export interface DeptRoster {
+  /** Explicit draft/published state — see DeptRosterStatus. */
+  status: DeptRosterStatus;
   /** Whether the Manager for this department has flagged their part
-   *  complete. Advances the KEMS workflow when the last dept flips true. */
+   *  complete. Advances the Evently workflow when the last dept flips
+   *  true. Equivalent to `status === "PUBLISHED"` — kept alongside it
+   *  since the workflow-advancement logic in lib/shadow-events.ts reads
+   *  this boolean specifically. */
   completed: boolean;
   completedAt?: string;
   completedByUserId?: string;
@@ -105,13 +120,13 @@ export type ShadowDeptKey =
 
 export interface ShadowEventRecord {
   bookingId: string;
-  kemsStatus: ShadowEventKemsStatus;
+  eventlyStatus: ShadowEventEventlyStatus;
   /** ISO timestamp of when the "booking is now Active — all-hands notify"
    *  fan-out fired. Set once, never cleared — used to avoid double-firing
    *  the notification when the Sheet is refetched. */
   activeNotifiedAt?: string;
   /** ISO timestamp of when the "event confirmed — all-hands notify"
-   *  fan-out fired. Set once, on the first visit AFTER kemsStatus reaches
+   *  fan-out fired. Set once, on the first visit AFTER eventlyStatus reaches
    *  PUBLISHED — the reconciliation loop retries every page load until
    *  the flag is set, so a Sheet outage or SMTP failure at HR-complete
    *  time doesn't permanently swallow the announcement. */
@@ -140,7 +155,7 @@ export interface ShadowEventRecord {
     completedByUserId?: string;
     lines: FinanceFinancialLine[];
   };
-  /** KEMS-side program flow (run-of-show). Same shape as the domain type
+  /** Evently-side program flow (run-of-show). Same shape as the domain type
    *  in lib/types.ts. Editable by Managers during ACTIVE / MANAGERS_
    *  IN_PROGRESS. */
   programFlow: ProgramFlowStep[];

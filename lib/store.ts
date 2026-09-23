@@ -79,7 +79,7 @@ export function inviteUser(input: Omit<User, "id" | "createdAt" | "verificationS
 
 /**
  * Provision a Viewer account for a user who signed in successfully via
- * Microsoft Entra ID but doesn't exist in KEMS yet. No invitation/password
+ * Microsoft Entra ID but doesn't exist in Evently yet. No invitation/password
  * flow is needed — Entra already verified their identity — so the account
  * is created directly in VERIFIED state. Department is left "Unassigned"
  * for a Super Admin to correct on the Users page.
@@ -322,20 +322,20 @@ export function pushNotificationTo(
 }
 
 /**
- * Return the next unused KEMS-EVT-#### reference key.
+ * Return the next unused EVENTLY-EVT-#### reference key.
  * Scans every existing event's ref no. and finds the next slot.
  */
 export function nextSequentialRefKey(): string {
   let max = 0;
   for (const e of store.events.values()) {
-    const m = e.s1.eventRefNo?.match(/KEMS-EVT-(\d{4})/i);
+    const m = e.s1.eventRefNo?.match(/EVENTLY-EVT-(\d{4})/i);
     if (m) {
       const n = parseInt(m[1], 10);
       if (n > max) max = n;
     }
   }
   const next = String(max + 1).padStart(4, "0");
-  return `KEMS-EVT-${next}`;
+  return `EVENTLY-EVT-${next}`;
 }
 
 // ─── Simulated email log + real delivery (spec §3) ─────────────────────────

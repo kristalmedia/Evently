@@ -42,7 +42,7 @@ export default async function CalendarPage() {
       title: kotgDisplayTitle(b),
       status: mapKotgBookingToEventStatus(
         b.booking.Status,
-        getShadowEvent(b.booking.BookingID)?.kemsStatus,
+        getShadowEvent(b.booking.BookingID)?.eventlyStatus,
       ),
       category: inferKotgCategory(b),
       venue: b.booking.LocationDetails || undefined,

@@ -42,7 +42,7 @@ import {
   getOrCreateShadowEvent,
   MANAGER_DEPT_KEYS,
 } from "@/lib/shadow-events";
-import type { ShadowEventKemsStatus } from "@/lib/shadow-events-types";
+import type { ShadowEventEventlyStatus } from "@/lib/shadow-events-types";
 import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
 import { DeptRosterEditor } from "@/components/kotg/dept-roster-editor";
 import { HrEditor, type FlatRosterRow } from "@/components/kotg/hr-editor";
@@ -58,12 +58,12 @@ const DEPT_LABEL: Record<string, string> = {
   HR: "HR",
 };
 
-const KEMS_STATUS_LABEL: Record<ShadowEventKemsStatus, string> = {
+const EVENTLY_STATUS_LABEL: Record<ShadowEventEventlyStatus, string> = {
   ACTIVE: "Active — awaiting Managers",
   MANAGERS_IN_PROGRESS: "Managers in progress",
   HR_UNLOCKED: "HR filling meal allowance",
   // FINANCE_UNLOCKED still exists in the type for backward compat but
-  // computeKemsStatus no longer produces it — kept here as a graceful
+  // computeEventlyStatus no longer produces it — kept here as a graceful
   // label in case an older shadow record round-trips through the type.
   FINANCE_UNLOCKED: "Finance review (legacy)",
   PUBLISHED: "Published",
@@ -99,7 +99,7 @@ export default async function EventDetailPage({
   const row = projectKotgBookingRow(kotg);
   const showBudget = canViewBudget(user);
   const budget = sumShadowBudget(shadow);
-  const status = mapKotgBookingToEventStatus(kotg.booking.Status, shadow.kemsStatus);
+  const status = mapKotgBookingToEventStatus(kotg.booking.Status, shadow.eventlyStatus);
 
   // Flat cross-dept roster for the HR editor — every slot from every
   // dept, with the staff user resolved server-side so the client can
@@ -156,20 +156,20 @@ export default async function EventDetailPage({
         }
       />
 
-      {/* KEMS workflow banner hides once the booking is Confirmed —
+      {/* Evently workflow banner hides once the booking is Confirmed —
           from that point on the page shows the unified "Who's working"
           roster instead of the workflow tracker. */}
-      {shadow.kemsStatus !== "PUBLISHED" && (
+      {shadow.eventlyStatus !== "PUBLISHED" && (
         <Card className="border-accent/30 bg-accent/[0.04]">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <ClipboardList className="h-4 w-4 text-accent" />
-              KEMS workflow
+              Evently workflow
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="text-sm">
-              <span className="font-medium">{KEMS_STATUS_LABEL[shadow.kemsStatus]}</span>
+              <span className="font-medium">{EVENTLY_STATUS_LABEL[shadow.eventlyStatus]}</span>
               {shadow.activeNotifiedAt && (
                 <span className="text-muted-foreground text-xs ml-2">
                   (all-hands notified{" "}
@@ -297,13 +297,13 @@ export default async function EventDetailPage({
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <DollarSign className="h-4 w-4 text-accent" />
-              KEMS budget summary
+              Evently budget summary
             </CardTitle>
           </CardHeader>
           <CardContent>
             {/* Only meal allowance is captured digitally now — HR
                 writes OT by hand, and the Finance "other" block was
-                removed from the KEMS workflow entirely. */}
+                removed from the Evently workflow entirely. */}
             <BudgetStat
               label="Meal allowance (HR)"
               value={formatBND(budget.mealAllowanceBND)}
@@ -313,14 +313,14 @@ export default async function EventDetailPage({
       )}
 
       {/* Roster surface — two mutually exclusive shapes:
-            • Pre-confirmation (kemsStatus !== PUBLISHED): per-dept
+            • Pre-confirmation (eventlyStatus !== PUBLISHED): per-dept
               cards, gated by canEditDept, driving the workflow forward.
-            • Confirmed (kemsStatus === PUBLISHED): one unified
+            • Confirmed (eventlyStatus === PUBLISHED): one unified
               "Who's working" table, editable by any Manager / HR /
               Super Admin for last-minute changes. The per-dept
               breakdown, the workflow banner and the HR editor all
               step aside so the confirmed-event view stays clean. */}
-      {shadow.kemsStatus === "PUBLISHED" ? (
+      {shadow.eventlyStatus === "PUBLISHED" ? (
         <ConfirmedRosterEditor
           bookingId={bookingId}
           rosterByDept={shadow.rosterByDept}
@@ -328,7 +328,7 @@ export default async function EventDetailPage({
         />
       ) : (
         (() => {
-          const visibleDepts = visibleDeptKeysForShadow(user, shadow.kemsStatus);
+          const visibleDepts = visibleDeptKeysForShadow(user, shadow.eventlyStatus);
           if (visibleDepts.length === 0) return null;
           return (
             <div className="space-y-4">
@@ -337,11 +337,12 @@ export default async function EventDetailPage({
                 {visibleDepts.map((deptKey) => {
                   const initial =
                     shadow.rosterByDept[deptKey] ?? {
+                      status: "DRAFT" as const,
                       completed: false,
                       slots: [],
                       staff: [],
                     };
-                  const editable = canEditDept(user, deptKey, shadow.kemsStatus);
+                  const editable = canEditDept(user, deptKey, shadow.eventlyStatus);
                   return (
                     <DeptRosterEditor
                       key={deptKey}
@@ -362,7 +363,7 @@ export default async function EventDetailPage({
           marks complete (workflow → PUBLISHED, "Confirmed Event").
           Post-confirmation the roster becomes the primary surface via
           ConfirmedRosterEditor above; the HR block is put away. */}
-      {shadow.kemsStatus === "HR_UNLOCKED" &&
+      {shadow.eventlyStatus === "HR_UNLOCKED" &&
         canViewBudget(user) && (
           <HrEditor
             bookingId={bookingId}
@@ -375,12 +376,12 @@ export default async function EventDetailPage({
             initialMealTicks={shadow.hr.mealTicks}
             initialOvertime={shadow.hr.overtime}
             completed={shadow.hr.completed}
-            readOnly={!canEditHr(user, shadow.kemsStatus)}
-            otReadOnly={!canEditHrOvertime(user, shadow.kemsStatus)}
+            readOnly={!canEditHr(user, shadow.eventlyStatus)}
+            otReadOnly={!canEditHrOvertime(user, shadow.eventlyStatus)}
             viewerDiagnostic={{
               role: user.role,
               secondaryRole: user.secondaryRole,
-              kemsStatus: shadow.kemsStatus,
+              eventlyStatus: shadow.eventlyStatus,
               isSuperAdmin: isSuperAdmin(user),
               isHr: hasRole(user, "HR"),
             }}
@@ -389,7 +390,7 @@ export default async function EventDetailPage({
 
       {/* Finance block editor removed per HR/GM decision — the workflow
           now goes Manager rosters → HR → PUBLISHED. Other-cost tracking
-          (equipment / production / marketing) lives outside KEMS. The
+          (equipment / production / marketing) lives outside Evently. The
           shadow.finance field is kept in the type contract so existing
           in-memory records survive round-trips. */}
 
@@ -435,8 +436,8 @@ export default async function EventDetailPage({
 }
 
 /** Grid of dept-completion chips + HR chip. Finance chip removed —
- *  Finance is no longer part of the KEMS workflow (other-cost tracking
- *  lives outside KEMS now). */
+ *  Finance is no longer part of the Evently workflow (other-cost tracking
+ *  lives outside Evently now). */
 function DeptCompletionGrid({
   shadow,
 }: {
@@ -462,9 +463,9 @@ function DeptCompletionGrid({
         state={
           shadow.hr.completed
             ? "done"
-            : shadow.kemsStatus === "HR_UNLOCKED" ||
-              shadow.kemsStatus === "FINANCE_UNLOCKED" ||
-              shadow.kemsStatus === "PUBLISHED"
+            : shadow.eventlyStatus === "HR_UNLOCKED" ||
+              shadow.eventlyStatus === "FINANCE_UNLOCKED" ||
+              shadow.eventlyStatus === "PUBLISHED"
             ? "in-progress"
             : "locked"
         }

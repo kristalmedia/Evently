@@ -140,7 +140,7 @@ export function ReportsView({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `kems-events-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `evently-events-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success(`Exported ${filtered.length} rows to CSV`);
@@ -207,7 +207,7 @@ export function ReportsView({
         alternateRowStyles: { fillColor: [245, 247, 250] },
       });
 
-      doc.save(`kems-events-${new Date().toISOString().slice(0, 10)}.pdf`);
+      doc.save(`evently-events-${new Date().toISOString().slice(0, 10)}.pdf`);
       toast.success(`Exported ${filtered.length} rows to PDF`);
     } catch (err) {
       toast.error("PDF export failed — check the console");

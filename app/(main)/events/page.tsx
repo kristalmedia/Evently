@@ -13,7 +13,7 @@ import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
 
 export default async function EventsPage() {
   await requireSession();
-  // Source of truth: KOTG bookings from the Sales sheet — KEMS no longer
+  // Source of truth: KOTG bookings from the Sales sheet — Evently no longer
   // owns event creation, that's a Sales-team responsibility living in the
   // Sheet. Every booking projects into the EventListRow shape the existing
   // table consumes unchanged.

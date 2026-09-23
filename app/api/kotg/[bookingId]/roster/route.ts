@@ -20,9 +20,9 @@ import { logAudit } from "@/lib/store";
  *      the block as a single form.
  *
  *      Auth: caller must hold canEditDept for the target dept at the
- *      record's current kemsStatus.
+ *      record's current eventlyStatus.
  *
- *      The shadow store recomputes kemsStatus on every write, so the
+ *      The shadow store recomputes eventlyStatus on every write, so the
  *      client just needs to send the block; workflow advancement is
  *      automatic when the last Manager block flips `completed: true`.
  */
@@ -48,22 +48,29 @@ export async function PUT(
   }
 
   const shadow = getOrCreateShadowEvent(bookingId);
-  if (!canEditDept(user, deptKey, shadow.kemsStatus)) {
+  if (!canEditDept(user, deptKey, shadow.eventlyStatus)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   // Normalise the incoming block — defensive against a client that
   // omits arrays. Completed is intentionally accepted as boolean-or-
   // undefined so the client can save intermediate progress without
-  // flipping the flag.
+  // flipping the flag ("Save Draft" vs "Mark complete" in the UI).
+  const existing = shadow.rosterByDept[deptKey];
+  const isCompleted = body.roster?.completed === true;
   const nextBlock: DeptRoster = {
-    completed: body.roster?.completed === true,
+    status: isCompleted ? "PUBLISHED" : "DRAFT",
+    completed: isCompleted,
     slots: Array.isArray(body.roster?.slots) ? body.roster!.slots : [],
     staff: Array.isArray(body.roster?.staff) ? body.roster!.staff : [],
   };
-  if (nextBlock.completed) {
-    nextBlock.completedAt = new Date().toISOString();
-    nextBlock.completedByUserId = user.id;
+  if (isCompleted) {
+    // Managers are allowed to keep editing a completed/published roster
+    // (last-minute corrections) — preserve the ORIGINAL completion
+    // timestamp/actor rather than re-stamping "now" on every subsequent
+    // save, so the audit trail still reflects when it was first published.
+    nextBlock.completedAt = existing?.completedAt ?? new Date().toISOString();
+    nextBlock.completedByUserId = existing?.completedByUserId ?? user.id;
   }
 
   const updated = setDeptRoster(bookingId, deptKey, nextBlock);
@@ -72,8 +79,12 @@ export async function PUT(
     actor: user,
     eventId: bookingId,
     details: `Dept ${deptKey} roster ${
-      nextBlock.completed ? "completed" : "saved"
-    } (kemsStatus → ${updated.kemsStatus})`,
+      nextBlock.completed
+        ? existing?.completed
+          ? "updated (already published)"
+          : "completed"
+        : "saved as draft"
+    } (eventlyStatus → ${updated.eventlyStatus})`,
   });
   return NextResponse.json({ shadow: updated });
 }

@@ -35,10 +35,10 @@ export async function POST(req: Request) {
 
   const email = await sendEmail({
     to: user.email,
-    subject: "Reminder — set up your KEMS account",
+    subject: "Reminder — set up your Evently account",
     body:
       `Hi ${user.fullName},\n\n` +
-      `A new invitation link has been generated for your KEMS account.\n\n` +
+      `A new invitation link has been generated for your Evently account.\n\n` +
       `Activate your account here:\n${invitationUrl}\n\n` +
       `— Kristal Media`,
   });

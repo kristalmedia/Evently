@@ -35,12 +35,19 @@ function makeSlotId(): string {
  * this in read-only mode across every dept once HR_UNLOCKED (rendered
  * via `readOnly` prop from the parent).
  *
- * Save vs Mark complete are separate actions:
- *   - Save: persists edits, keeps dept editable (kemsStatus stays as-is).
- *   - Mark complete: same PUT with completed:true, which flips the
- *     completion flag and (when the last dept flips) advances the
- *     workflow to HR_UNLOCKED. The button is destructive-tinted since
- *     it also locks the dept out of further edits.
+ * Save Draft vs Mark complete are separate actions:
+ *   - Save Draft: persists edits without publishing — status stays
+ *     "DRAFT", eventlyStatus is untouched, and nobody is notified.
+ *   - Mark complete: same PUT with completed:true, which flips status to
+ *     "PUBLISHED" and (when the last dept flips) advances the workflow
+ *     to HR_UNLOCKED.
+ *
+ * Editing is gated ENTIRELY by the `readOnly` prop (server-side
+ * permission — see canEditDept in lib/kotg-permissions.ts), not by
+ * whether the block is already completed. Managers can keep editing —
+ * and re-saving — their own dept's roster even after marking it
+ * complete or after the event is fully Confirmed; that's the point of
+ * the "edit at any stage" rule.
  */
 export function DeptRosterEditor({
   bookingId,
@@ -124,7 +131,7 @@ export function DeptRosterEditor({
       toast.success(
         complete
           ? `${DEPT_LABEL[deptKey]} roster marked complete`
-          : `${DEPT_LABEL[deptKey]} roster saved`,
+          : `${DEPT_LABEL[deptKey]} roster saved as draft`,
         { position: "bottom-center" },
       );
       router.refresh();
@@ -142,10 +149,14 @@ export function DeptRosterEditor({
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center justify-between gap-2">
           <span>{DEPT_LABEL[deptKey]} roster</span>
-          {initial.completed && (
+          {initial.completed ? (
             <span className="text-xs font-normal text-emerald-600 dark:text-emerald-400 inline-flex items-center gap-1">
               <CheckCircle2 className="h-3.5 w-3.5" />
-              Completed
+              Published
+            </span>
+          ) : (
+            <span className="text-xs font-normal text-muted-foreground inline-flex items-center gap-1">
+              Draft
             </span>
           )}
         </CardTitle>
@@ -175,19 +186,19 @@ export function DeptRosterEditor({
                   type="date"
                   value={s.date}
                   onChange={(e) => updateSlot(s.id, { date: e.target.value })}
-                  disabled={readOnly || initial.completed}
+                  disabled={readOnly}
                 />
                 <Input
                   type="time"
                   value={s.start}
                   onChange={(e) => updateSlot(s.id, { start: e.target.value })}
-                  disabled={readOnly || initial.completed}
+                  disabled={readOnly}
                 />
                 <Input
                   type="time"
                   value={s.end}
                   onChange={(e) => updateSlot(s.id, { end: e.target.value })}
-                  disabled={readOnly || initial.completed}
+                  disabled={readOnly}
                 />
                 {/* Native select over the directory. `w-full min-w-0
                     max-w-full` + text-ellipsis on the select itself
@@ -197,7 +208,7 @@ export function DeptRosterEditor({
                   className="h-9 w-full min-w-0 max-w-full rounded-md border border-input bg-background px-2 text-sm truncate"
                   value={s.staffUserId ?? ""}
                   onChange={(e) => updateSlot(s.id, { staffUserId: e.target.value })}
-                  disabled={readOnly || initial.completed}
+                  disabled={readOnly}
                   // `title` shows the full "Name · Department" on hover
                   // even when the visible label is truncated.
                   title={
@@ -221,7 +232,7 @@ export function DeptRosterEditor({
                       </option>
                     )}
                 </select>
-                {!readOnly && !initial.completed && (
+                {!readOnly && (
                   <Button
                     variant="ghost"
                     size="icon"
@@ -235,7 +246,7 @@ export function DeptRosterEditor({
             ))}
           </div>
         )}
-        {!readOnly && !initial.completed && (
+        {!readOnly && (
           <div className="flex flex-wrap items-center gap-2 pt-2 border-t">
             <Button
               variant="outline"
@@ -256,27 +267,29 @@ export function DeptRosterEditor({
                 className="gap-1.5"
               >
                 <Save className="h-3.5 w-3.5" />
-                {busy ? "Saving…" : "Save"}
+                {busy ? "Saving…" : initial.completed ? "Save changes" : "Save Draft"}
               </Button>
-              <Button
-                variant="accent"
-                size="sm"
-                onClick={() => {
-                  if (
-                    !confirm(
-                      `Mark ${DEPT_LABEL[deptKey]} roster complete? You won't be able to edit it after this. When every department completes, HR unlocks next.`,
-                    )
-                  ) {
-                    return;
-                  }
-                  put(true);
-                }}
-                disabled={busy || !canComplete}
-                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700"
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Mark complete
-              </Button>
+              {!initial.completed && (
+                <Button
+                  variant="accent"
+                  size="sm"
+                  onClick={() => {
+                    if (
+                      !confirm(
+                        `Mark ${DEPT_LABEL[deptKey]} roster complete? This publishes it and moves the workflow forward — you can still come back and edit it afterward if something needs correcting. When every department completes, HR unlocks next.`,
+                      )
+                    ) {
+                      return;
+                    }
+                    put(true);
+                  }}
+                  disabled={busy || !canComplete}
+                  className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Mark complete
+                </Button>
+              )}
             </div>
           </div>
         )}

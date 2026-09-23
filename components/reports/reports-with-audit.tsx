@@ -133,7 +133,7 @@ function AuditLog({ entries }: { entries: AuditEntry[] }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `kems-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `evently-audit-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success(`Exported ${entries.length} audit entries to CSV`);
@@ -168,7 +168,7 @@ function AuditLog({ entries }: { entries: AuditEntry[] }) {
         headStyles: { fillColor: [11, 42, 74], textColor: 255 },
         alternateRowStyles: { fillColor: [245, 247, 250] },
       });
-      doc.save(`kems-audit-${new Date().toISOString().slice(0, 10)}.pdf`);
+      doc.save(`evently-audit-${new Date().toISOString().slice(0, 10)}.pdf`);
       toast.success(`Exported ${entries.length} audit entries to PDF`);
     } catch (err) {
       toast.error("PDF export failed");

@@ -140,7 +140,7 @@ export function LoginPanel({ users }: { users: User[] }) {
           <div className="space-y-2">
             <div className="callsign">Sign in</div>
             <h2 className="text-2xl font-semibold tracking-tight">
-              Welcome to KEMS
+              Welcome to Evently
             </h2>
             <p className="text-sm text-muted-foreground">
               Sign in with your <span className="font-mono">@kristal.media</span>{" "}
@@ -184,7 +184,7 @@ export function LoginPanel({ users }: { users: User[] }) {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Sign in as a seeded test user — no Microsoft account required.
-                  Use this to explore KEMS before Entra ID SSO is configured.
+                  Use this to explore Evently before Entra ID SSO is configured.
                 </p>
 
                 <div className="space-y-2">

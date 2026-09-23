@@ -20,7 +20,7 @@ import { publicUrl } from "./public-url";
  *   2. Org-wide in-app EVENT_PUBLISHED broadcast.
  *   3. Fire-and-forget SMTP courtesy email to every active user.
  *
- * The booking's identity in KEMS is its BookingID (used as the eventId on
+ * The booking's identity in Evently is its BookingID (used as the eventId on
  * notifications) — the event detail page accepts a BookingID as its route
  * param and lazy-inits a shadow record on visit.
  */
@@ -78,7 +78,7 @@ export async function announceActiveBooking(
 
 /**
  * Confirmed-event fan-out — fires exactly once, when HR marks their
- * block complete and the booking's KEMS workflow reaches PUBLISHED.
+ * block complete and the booking's Evently workflow reaches PUBLISHED.
  *
  * Caller must gate on the *transition* (not the current flag), i.e.
  * only invoke this when hr.completed just flipped from false to true.

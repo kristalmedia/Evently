@@ -1,33 +1,33 @@
 import type { KotgBookingWithClient } from "./google-sheets-types";
 import type { EventListRow, EventStatus } from "./types";
 import type {
-  ShadowEventKemsStatus,
+  ShadowEventEventlyStatus,
   ShadowEventRecord,
 } from "./shadow-events-types";
 import { getShadowEvent } from "./shadow-events";
 
 /**
  * Projection layer — turns a Sheet-sourced KOTG booking (plus, when it
- * exists, its KEMS shadow record) into the shapes the existing dashboard /
+ * exists, its Evently shadow record) into the shapes the existing dashboard /
  * calendar / events-table UI already consumes. Keeps the swap from the
  * old EventConcept source to the new Sheet+shadow source strictly a
  * data-plumbing change; no UI component needs to know the origin.
  */
 
-/** Sheet-Status values that should never surface to non-Sales KEMS
+/** Sheet-Status values that should never surface to non-Sales Evently
  *  users. Cancelled bookings remain in the Sheet (Sales keeps them for
  *  audit) but every list — dashboard, calendar, events, reports, event
  *  detail — filters them out via `filterVisibleBookings`. Matched
  *  case-insensitively + trimmed. */
 const HIDDEN_SHEET_STATUSES = new Set(["cancelled", "canceled"]);
 
-/** Predicate: is this Sheet-Status value one KEMS should surface? */
+/** Predicate: is this Sheet-Status value one Evently should surface? */
 export function isVisibleBookingStatus(sheetStatus: string): boolean {
   return !HIDDEN_SHEET_STATUSES.has(sheetStatus.trim().toLowerCase());
 }
 
 /** Convenience: drop every booking whose Sheet Status is Cancelled.
- *  Every KEMS list page should route the raw fetch through this before
+ *  Every Evently list page should route the raw fetch through this before
  *  handing rows to the UI. */
 export function filterVisibleBookings(
   bookings: KotgBookingWithClient[],
@@ -35,14 +35,14 @@ export function filterVisibleBookings(
   return bookings.filter((b) => isVisibleBookingStatus(b.booking.Status));
 }
 
-/** Derives the UI EventStatus from the pair (Sheet booking status, KEMS
- *  shadow.kemsStatus). Called for every row every render, so kept as a
+/** Derives the UI EventStatus from the pair (Sheet booking status, Evently
+ *  shadow.eventlyStatus). Called for every row every render, so kept as a
  *  pure lookup with no side effects.
  *
  *  Logic:
  *    - Sheet says Cancelled → CANCELLED
  *    - Sheet says Completed → COMPLETED
- *    - Sheet Active + shadow kemsStatus determines the KEMS internal stage:
+ *    - Sheet Active + shadow eventlyStatus determines the Evently internal stage:
  *        ACTIVE / MANAGERS_IN_PROGRESS → STAFFING_IN_PROGRESS
  *        HR_UNLOCKED / FINANCE_UNLOCKED → FINANCIAL_REVIEW
  *        PUBLISHED → PUBLISHED
@@ -53,14 +53,14 @@ export function filterVisibleBookings(
  */
 export function mapKotgBookingToEventStatus(
   sheetStatus: string,
-  kemsStatus: ShadowEventKemsStatus | undefined,
+  eventlyStatus: ShadowEventEventlyStatus | undefined,
 ): EventStatus {
   const s = sheetStatus.trim().toLowerCase();
   if (s === "cancelled" || s === "canceled") return "CANCELLED";
   if (s === "completed") return "COMPLETED";
   if (s !== "active") return "UPCOMING";
 
-  switch (kemsStatus) {
+  switch (eventlyStatus) {
     case "PUBLISHED":
       // Terminal state after HR marks complete — badge reads
       // "Confirmed Event" (see EVENT_STATUSES in lib/constants.ts).
@@ -116,7 +116,7 @@ export function projectKotgBookingRow(
   const shadow = getShadowEvent(booking.booking.BookingID);
   const status = mapKotgBookingToEventStatus(
     booking.booking.Status,
-    shadow?.kemsStatus,
+    shadow?.eventlyStatus,
   );
   const now = Date.now();
   const start = booking.booking.StartDate
@@ -168,7 +168,7 @@ export function projectKotgCalendarItem(
     title: kotgDisplayTitle(booking),
     start: booking.booking.StartDate,
     end: booking.booking.EndDate || undefined,
-    status: mapKotgBookingToEventStatus(booking.booking.Status, shadow?.kemsStatus),
+    status: mapKotgBookingToEventStatus(booking.booking.Status, shadow?.eventlyStatus),
     category: inferKotgCategory(booking),
     description: booking.booking.Notes || undefined,
     venue: booking.booking.LocationDetails || undefined,

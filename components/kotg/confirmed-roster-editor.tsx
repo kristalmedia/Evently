@@ -77,7 +77,7 @@ function flattenRoster(
 
 /**
  * Unified "Who's working" roster editor — surfaces on the event detail
- * page ONLY when the booking is Confirmed (kemsStatus = PUBLISHED).
+ * page ONLY when the booking is Confirmed (eventlyStatus = PUBLISHED).
  *
  * Replaces the per-dept card grid with a single flat table so viewers
  * see the whole event's staffing at once, and any Manager / HR /

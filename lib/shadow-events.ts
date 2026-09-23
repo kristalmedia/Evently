@@ -1,12 +1,12 @@
 import type {
   DeptRoster,
   ShadowDeptKey,
-  ShadowEventKemsStatus,
+  ShadowEventEventlyStatus,
   ShadowEventRecord,
 } from "./shadow-events-types";
 
 /**
- * In-memory store for shadow event records — the KEMS-only fields layered
+ * In-memory store for shadow event records — the Evently-only fields layered
  * on top of Sheet bookings. See lib/shadow-events-types.ts for the shape,
  * and lib/google-sheets.ts for the Sheet side of the join.
  *
@@ -45,7 +45,7 @@ function emptyRecord(bookingId: string): ShadowEventRecord {
   const now = new Date().toISOString();
   return {
     bookingId,
-    kemsStatus: "ACTIVE",
+    eventlyStatus: "ACTIVE",
     rosterByDept: {},
     hr: { completed: false, mealTicks: {}, overtime: [] },
     finance: { completed: false, lines: [] },
@@ -99,11 +99,11 @@ export function getDeptRoster(
   deptKey: ShadowDeptKey,
 ): DeptRoster {
   const shadow = getOrCreateShadowEvent(bookingId);
-  return shadow.rosterByDept[deptKey] ?? { completed: false, slots: [], staff: [] };
+  return shadow.rosterByDept[deptKey] ?? { status: "DRAFT", completed: false, slots: [], staff: [] };
 }
 
 /** Wholesale-replace one department's roster block and recompute the
- *  overall kemsStatus. Returns the updated record. */
+ *  overall eventlyStatus. Returns the updated record. */
 export function setDeptRoster(
   bookingId: string,
   deptKey: ShadowDeptKey,
@@ -114,13 +114,13 @@ export function setDeptRoster(
     ...current.rosterByDept,
     [deptKey]: roster,
   };
-  const nextKemsStatus = computeKemsStatus({
+  const nextEventlyStatus = computeEventlyStatus({
     ...current,
     rosterByDept: nextRosterByDept,
   });
   return updateShadowEvent(bookingId, {
     rosterByDept: nextRosterByDept,
-    kemsStatus: nextKemsStatus,
+    eventlyStatus: nextEventlyStatus,
   });
 }
 
@@ -164,7 +164,7 @@ export function markHrComplete(
   };
   return updateShadowEvent(bookingId, {
     hr: next.hr,
-    kemsStatus: computeKemsStatus(next),
+    eventlyStatus: computeEventlyStatus(next),
   });
 }
 
@@ -187,21 +187,21 @@ export function markFinanceComplete(
   };
   return updateShadowEvent(bookingId, {
     finance: next.finance,
-    kemsStatus: computeKemsStatus(next),
+    eventlyStatus: computeEventlyStatus(next),
   });
 }
 
-/** Derives the KEMS workflow status from the record's completion flags.
+/** Derives the Evently workflow status from the record's completion flags.
  *  Called on every roster/HR write so the status is always in sync with
  *  the underlying data — no separate "advance workflow" step to forget.
  *
  *  Workflow is: MANAGERS all done → HR_UNLOCKED; +HR done → PUBLISHED.
  *  Finance was removed from the workflow (other-cost tracking now lives
- *  outside KEMS), so HR's "Mark complete" is the terminal step.
+ *  outside Evently), so HR's "Mark complete" is the terminal step.
  *
  *  `record.finance.completed` is retained on the type for schema
  *  compatibility but no longer affects the derived status. */
-export function computeKemsStatus(record: ShadowEventRecord): ShadowEventKemsStatus {
+export function computeEventlyStatus(record: ShadowEventRecord): ShadowEventEventlyStatus {
   const managersDone = MANAGER_DEPT_KEYS.every(
     (k) => record.rosterByDept[k]?.completed === true,
   );
@@ -225,7 +225,7 @@ export function shadowMakeId(prefix: string): string {
 
 /** Bulk-purge shadow records whose bookingIds are no longer present in
  *  the Sheet. Called opportunistically after a Sheet refresh — the Sales
- *  team occasionally deletes bookings; we shouldn't hold orphan KEMS
+ *  team occasionally deletes bookings; we shouldn't hold orphan Evently
  *  state indefinitely. */
 export function purgeMissingShadowEvents(activeBookingIds: Set<string>): number {
   const s = store();
@@ -240,7 +240,7 @@ export function purgeMissingShadowEvents(activeBookingIds: Set<string>): number 
 }
 
 /** Read-only iteration over all shadow records — used by dashboards that
- *  need to layer KEMS state over the Sheet-sourced booking list. */
+ *  need to layer Evently state over the Sheet-sourced booking list. */
 export function listShadowEvents(): ShadowEventRecord[] {
   return Array.from(store().values());
 }

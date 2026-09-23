@@ -8,7 +8,7 @@ const SESSION_COOKIE = "km_session";
 /**
  * Dual auth: real Microsoft Entra ID SSO (via Better Auth) checked first,
  * with the mock "test environment" cookie session (see login-panel.tsx) as a
- * fallback for exploring KEMS without an Entra account. Everything else in
+ * fallback for exploring Evently without an Entra account. Everything else in
  * the app depends only on `getSession` / `signInAsUserId` / `signOut`.
  */
 

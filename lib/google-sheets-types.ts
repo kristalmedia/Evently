@@ -1,6 +1,6 @@
 /**
  * Shapes mirroring the Sales team's external Google Sheet — NOT part of
- * KEMS's own domain model (see lib/types.ts). Kept separate deliberately:
+ * Evently's own domain model (see lib/types.ts). Kept separate deliberately:
  * these are someone else's spreadsheet columns, not our schema, and they
  * can change without warning since the Sheet is manually maintained by
  * the Sales team.
@@ -8,7 +8,7 @@
  * Field lists match the header rows as given by the Sales Manager
  * (2026-09-14). If they add/rename/reorder columns, parseSheetRows() in
  * lib/google-sheets.ts reads the live header row every fetch and maps by
- * name — reordering is safe; renaming a column KEMS reads (Category,
+ * name — reordering is safe; renaming a column Evently reads (Category,
  * ClientID, ClientName, etc.) is NOT, and will need a matching update here.
  */
 

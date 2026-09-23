@@ -288,11 +288,11 @@ export const DEPT_ROSTER: { key: string; label: string; members: string[] }[] = 
 ];
 
 /**
- * Unique reference key generator — spec format: `KEMS-EVT-####`.
+ * Unique reference key generator — spec format: `EVENTLY-EVT-####`.
  * The number is always 4-digit zero-padded. Uniqueness is enforced by the
  * `nextSequentialRefKey` helper in the store which scans existing events.
  */
 export function generateReferenceKey(seed?: number): string {
   const num = String(seed ?? Math.floor(Math.random() * 9000) + 1000).padStart(4, "0");
-  return `KEMS-EVT-${num}`;
+  return `EVENTLY-EVT-${num}`;
 }

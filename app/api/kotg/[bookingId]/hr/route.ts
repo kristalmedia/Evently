@@ -31,7 +31,7 @@ const OT_ELIGIBLE_DEPTS: readonly string[] = ["IT", "Technical"];
  *       row so the client can point HR at the offending line rather than
  *       silently dropping it.
  *
- *       Marking complete flips the shadow record's kemsStatus from
+ *       Marking complete flips the shadow record's eventlyStatus from
  *       HR_UNLOCKED → FINANCE_UNLOCKED. Idempotent — a repeat with
  *       complete:true is a no-op.
  */
@@ -56,8 +56,8 @@ export async function PUT(
   // canEditHrOvertime is broader and includes Finance Lead during
   // FINANCE_UNLOCKED so Putri can adjust the OT amounts. A viewer must
   // hold at least one of them to reach this endpoint.
-  const canMealOrComplete = canEditHr(user, shadow.kemsStatus);
-  const canOt = canEditHrOvertime(user, shadow.kemsStatus);
+  const canMealOrComplete = canEditHr(user, shadow.eventlyStatus);
+  const canOt = canEditHrOvertime(user, shadow.eventlyStatus);
   if (!canMealOrComplete && !canOt) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -101,7 +101,7 @@ export async function PUT(
     // safely coexists with the reconciliation-loop retry in
     // lib/kotg-sync.ts, which fires on the next page visit if this
     // attempt fails or if HR marked complete before this code shipped.
-    if (next.kemsStatus === "PUBLISHED" && markConfirmedNotified(bookingId)) {
+    if (next.eventlyStatus === "PUBLISHED" && markConfirmedNotified(bookingId)) {
       try {
         const bookings = await getKotgBookingsWithClients();
         const b = bookings.find((x) => x.booking.BookingID === bookingId);
@@ -134,7 +134,7 @@ export async function PUT(
     eventId: bookingId,
     details: `HR saved (${mealCount} meal ticks, ${overtime.length} OT rows${
       body.complete && canMealOrComplete ? " + marked complete" : ""
-    }; kemsStatus → ${next.kemsStatus})`,
+    }; eventlyStatus → ${next.eventlyStatus})`,
   });
   return NextResponse.json({ shadow: next });
 }

@@ -8,7 +8,7 @@ import { reconcileKotgBookings } from "@/lib/kotg-sync";
  * GET — KOTG service bookings from the Sales team's Google Sheet, joined
  * with their Clients records. Gated behind `events.create` (Sales Admin,
  * CCM Admin, Super Admin) since this is sales-facing client/booking data,
- * not something every KEMS role needs to see.
+ * not something every Evently role needs to see.
  *
  * Pass ?refresh=1 to bypass the 30s in-process cache (lib/google-sheets.ts)
  * for an explicit user-triggered refresh.

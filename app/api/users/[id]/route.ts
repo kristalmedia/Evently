@@ -8,10 +8,17 @@ import type { Role } from "@/lib/types";
  * PATCH — Super Admin only. Update a user's name and/or roles.
  * Spec §1B/§3: only Super Admins can edit names + roles. Change is audited.
  *
- * `secondaryRole` uses null-vs-undefined semantics:
+ * `secondaryRole` / `thirdRole` use null-vs-undefined semantics:
  *   undefined → don't touch (backwards compatible with older clients)
- *   null      → explicit clear (user goes back to primary-role-only)
+ *   null      → explicit clear
  *   Role      → set/overwrite
+ *
+ * `thirdRole` is additionally restricted to Super Admins by nature of this
+ * whole route requiring "users.manage" (see `can()` in lib/permissions.ts —
+ * no role holds that permission except via the Super Admin bypass), so
+ * there's no separate gate to add here; the route-level check already is
+ * the third-role gate. The corresponding UI control is only rendered for a
+ * Super Admin viewer (see components/users/user-management-table.tsx).
  */
 export async function PATCH(
   req: Request,
@@ -30,16 +37,25 @@ export async function PATCH(
     fullName?: string;
     role?: Role;
     secondaryRole?: Role | null;
+    thirdRole?: Role | null;
   };
 
-  // Reject secondary === primary — makes no sense and would silently
-  // become dead weight in every permission check.
+  // Reject secondary/third === primary, and third === secondary — makes no
+  // sense and would silently become dead weight in every permission check.
   const nextPrimary = body.role ?? existing.role;
   const nextSecondaryRaw =
     body.secondaryRole === undefined ? existing.secondaryRole : body.secondaryRole ?? undefined;
+  const nextThirdRaw =
+    body.thirdRole === undefined ? existing.thirdRole : body.thirdRole ?? undefined;
   if (nextSecondaryRaw && nextSecondaryRaw === nextPrimary) {
     return NextResponse.json(
       { error: "Secondary role must differ from primary role." },
+      { status: 400 }
+    );
+  }
+  if (nextThirdRaw && (nextThirdRaw === nextPrimary || nextThirdRaw === nextSecondaryRaw)) {
+    return NextResponse.json(
+      { error: "Third role must differ from the primary and secondary roles." },
       { status: 400 }
     );
   }
@@ -52,6 +68,7 @@ export async function PATCH(
     // just set the key to null, which serializes fine but reads awkward
     // elsewhere; normalise to undefined here).
     secondaryRole: nextSecondaryRaw,
+    thirdRole: nextThirdRaw,
   };
   upsertUser(updated);
 
@@ -66,6 +83,11 @@ export async function PATCH(
   if (body.secondaryRole !== undefined && (body.secondaryRole ?? undefined) !== existing.secondaryRole) {
     changes.push(
       `secondaryRole: ${existing.secondaryRole ?? "—"} → ${body.secondaryRole ?? "—"}`
+    );
+  }
+  if (body.thirdRole !== undefined && (body.thirdRole ?? undefined) !== existing.thirdRole) {
+    changes.push(
+      `thirdRole: ${existing.thirdRole ?? "—"} → ${body.thirdRole ?? "—"}`
     );
   }
   if (changes.length) {

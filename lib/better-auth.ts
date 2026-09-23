@@ -8,7 +8,7 @@ import type { MicrosoftEntraIDProfile } from "@better-auth/core/social-providers
  * lib/store.ts) with zero new dependencies. Resets on server restart, same
  * as the rest of the app's data.
  *
- * KEMS's own User records (role, department, verificationStatus, etc.) live
+ * Evently's own User records (role, department, verificationStatus, etc.) live
  * separately in lib/store.ts and are reconciled by email in lib/auth.ts —
  * Better Auth here is only responsible for the OAuth handshake itself.
  *

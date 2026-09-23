@@ -84,7 +84,7 @@ export function SetPasswordPanel({
             <span className="text-white/80">Onboarding · set password</span>
           </div>
           <h1 className="text-4xl font-semibold tracking-tight leading-tight">
-            Welcome to KEMS.
+            Welcome to Evently.
           </h1>
           <p className="text-white/70 leading-relaxed">
             Set your password to activate your account. Once verified, you'll be able

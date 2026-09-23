@@ -12,10 +12,10 @@ import { logAudit } from "@/lib/store";
 /**
  * PUT — replace the Finance Lead's block (equipment / production /
  *       marketing lines) and optionally mark Finance complete. Marking
- *       complete flips the shadow record's kemsStatus to PUBLISHED (via
+ *       complete flips the shadow record's eventlyStatus to PUBLISHED (via
  *       the shadow store's recompute), freezing the whole record.
  *
- *       Auth: canEditFinance must hold at the record's kemsStatus
+ *       Auth: canEditFinance must hold at the record's eventlyStatus
  *       (FINANCE_UNLOCKED — Putri only).
  *
  *       Complete is idempotent — second call with complete:true is a no-op.
@@ -35,7 +35,7 @@ export async function PUT(
   };
 
   const shadow = getOrCreateShadowEvent(bookingId);
-  if (!canEditFinance(user, shadow.kemsStatus)) {
+  if (!canEditFinance(user, shadow.eventlyStatus)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

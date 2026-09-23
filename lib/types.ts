@@ -15,6 +15,11 @@
  *                     no longer holds Financial edit — that moved to
  *                     FINANCE_LEAD to make the "exclusive" grant real
  *   HR / VIEWER     — read-only tiers
+ *   ROSTER_ADMIN    — dedicated roster-management tier (see
+ *                     ROLE_PERMISSIONS in lib/permissions.ts for its
+ *                     exact grant; currently mirrors read-only + roster
+ *                     visibility until a fuller spec lands)
+ *   INVENTORY_ADMIN — dedicated inventory-management tier (same caveat)
  */
 export type Role =
   | "SUPER_ADMIN"
@@ -24,7 +29,9 @@ export type Role =
   | "FINANCE_LEAD"
   | "FINANCIAL_ADMIN"
   | "HR"
-  | "VIEWER";
+  | "VIEWER"
+  | "ROSTER_ADMIN"
+  | "INVENTORY_ADMIN";
 
 export type Department =
   | "Sales"
@@ -57,6 +64,16 @@ export interface User {
    * who also acts as Sales Admin gets both surfaces.
    */
   secondaryRole?: Role;
+  /**
+   * Optional third role, unioned into permission checks the same way as
+   * secondaryRole (see `rolesFor` in permissions.ts). Editing this field
+   * is restricted to Super Admins only — enforced server-side in the
+   * PATCH /api/users/[id] handler (the whole route already requires
+   * "users.manage", which only Super Admin holds) and reflected in the
+   * UI by only rendering the third-role picker for a Super Admin viewer
+   * (see components/users/user-management-table.tsx).
+   */
+  thirdRole?: Role;
   /**
    * ISO timestamp of when the user last acknowledged the onboarding
    * tutorial (either by dismissing it or by ticking "Don't show again").

@@ -93,7 +93,7 @@ async function fetchRange(range: string): Promise<string[][]> {
  * First row of `rows` is treated as the header row and used to map every
  * subsequent row into an object keyed by header name — NOT by column
  * position. This means the Sales team reordering columns in their Sheet
- * doesn't break parsing; only renaming a column KEMS reads by name would.
+ * doesn't break parsing; only renaming a column Evently reads by name would.
  * Missing trailing cells (Sheets omits them rather than padding with
  * blanks) are treated as "".
  */

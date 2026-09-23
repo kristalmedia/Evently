@@ -13,7 +13,7 @@ import {
 
 /**
  * Reconciles the KOTG bookings we just fetched from the Sheet against the
- * KEMS shadow-event store. Called opportunistically after every server-side
+ * Evently shadow-event store. Called opportunistically after every server-side
  * fetch of the bookings list (page load, API refresh) — the pivot spec
  * option (a) for polling: on-visit transition detection with no background
  * worker.
@@ -21,13 +21,13 @@ import {
  * What it does per call:
  *   - For every Sheet booking whose Status is "Active" (case-insensitive,
  *     trimmed): lazy-init the shadow record, and if `activeNotifiedAt` was
- *     unset (first time this booking appears Active in KEMS), fire the
+ *     unset (first time this booking appears Active in Evently), fire the
  *     all-hands announceActiveBooking fan-out. Fully idempotent — the
  *     shadow record's activeNotifiedAt flag prevents double-notification
  *     across concurrent visits.
  *   - Garbage-collect shadow records whose bookingIds are no longer
  *     present in the Sheet (Sales deletes are rare but should not
- *     accumulate orphan KEMS state).
+ *     accumulate orphan Evently state).
  *
  * Notification sends run fire-and-forget (Promise.allSettled) so a slow
  * SMTP relay never delays the caller's page render.
@@ -63,13 +63,13 @@ export function reconcileKotgBookings(
       );
     }
 
-    // Confirmed-event fan-out — fires once per booking when kemsStatus
+    // Confirmed-event fan-out — fires once per booking when eventlyStatus
     // reaches PUBLISHED. Checked on EVERY reconcile so a Sheet outage
     // or SMTP failure at HR-complete time doesn't permanently lose the
     // email; the next page load retries until markConfirmedNotified
     // finally flips the flag.
     const shadow = getShadowEvent(bookingId);
-    if (shadow && shadow.kemsStatus === "PUBLISHED") {
+    if (shadow && shadow.eventlyStatus === "PUBLISHED") {
       const firedConfirmed = markConfirmedNotified(bookingId);
       if (firedConfirmed) {
         newlyConfirmed += 1;

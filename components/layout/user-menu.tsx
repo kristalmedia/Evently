@@ -28,7 +28,7 @@ export function UserMenu() {
     const { wasEntraSession } = await res.json().catch(() => ({ wasEntraSession: false }));
     useSessionStore.getState().clear();
 
-    // Clearing our own cookies only ends KEMS's session — the browser still
+    // Clearing our own cookies only ends Evently's session — the browser still
     // has an active Microsoft SSO session unless we explicitly redirect
     // through Entra's own end_session_endpoint (front-channel logout).
     // Without this, "Sign in with Microsoft" next time silently re-uses the

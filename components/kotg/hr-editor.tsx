@@ -124,7 +124,7 @@ export function HrEditor({
   viewerDiagnostic?: {
     role: string;
     secondaryRole?: string;
-    kemsStatus: string;
+    eventlyStatus: string;
     isSuperAdmin: boolean;
     isHr: boolean;
   };
@@ -148,7 +148,7 @@ export function HrEditor({
   });
 
   // Overtime state was removed — HR now enters OT amounts by hand on
-  // the printed PDF, not in KEMS. The on-screen OT section is info-only
+  // the printed PDF, not in Evently. The on-screen OT section is info-only
   // (which shifts qualify), and the PDF export renders blank Notes /
   // Amount columns for handwriting. `initialOvertime` is intentionally
   // unused on the client but kept in the API/type contract so existing
@@ -318,7 +318,7 @@ export function HrEditor({
                   {viewerDiagnostic.secondaryRole
                     ? ` (+${viewerDiagnostic.secondaryRole})`
                     : ""}
-                  {" · "}kemsStatus={viewerDiagnostic.kemsStatus}
+                  {" · "}eventlyStatus={viewerDiagnostic.eventlyStatus}
                   {" · "}completed={String(completed)}
                   {" · "}readOnly={String(readOnly)}
                   {" · "}otLocked={String(otLocked)}
@@ -332,7 +332,7 @@ export function HrEditor({
             per HR's request. OT amounts are HR's / Finance's manual
             per-shift entries and each row shows its own amount below;
             an aggregate at the top wasn't adding value and made it
-            look like KEMS was calculating OT automatically. */}
+            look like Evently was calculating OT automatically. */}
         <div className="rounded-md border p-3 bg-emerald-500/[0.04] border-emerald-500/30 max-w-sm">
           <div className="callsign inline-flex items-center gap-1.5">
             <Coffee className="h-3 w-3" /> Meal allowance total

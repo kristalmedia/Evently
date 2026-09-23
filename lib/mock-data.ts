@@ -85,7 +85,7 @@ export const SEED_EVENTS: EventConcept[] = [
     s1: {
       eventName: "KOTG @ The Mall Gadong",
       edition: "2026",
-      eventRefNo: "KEMS-EVT-0007",
+      eventRefNo: "EVENTLY-EVT-0007",
       startDate: new Date(Date.now() + 5 * 24 * 3600e3).toISOString(),
       endDate: new Date(Date.now() + 5 * 24 * 3600e3 + 4 * 3600e3).toISOString(),
       venue: "The Mall Gadong — Atrium",
@@ -121,7 +121,7 @@ export const SEED_EVENTS: EventConcept[] = [
     updatedAt: NOW,
     s1: {
       eventName: "Hua Ho Product Launch — Live Broadcast",
-      eventRefNo: "KEMS-EVT-0008",
+      eventRefNo: "EVENTLY-EVT-0008",
       startDate: new Date(Date.now() + 12 * 24 * 3600e3).toISOString(),
       endDate: new Date(Date.now() + 12 * 24 * 3600e3 + 3 * 3600e3).toISOString(),
       venue: "Hua Ho Manggis Complex",
@@ -157,7 +157,7 @@ export const SEED_EVENTS: EventConcept[] = [
     updatedAt: NOW,
     s1: {
       eventName: "Taman SOAS — Weekend Broadcast",
-      eventRefNo: "KEMS-EVT-0006",
+      eventRefNo: "EVENTLY-EVT-0006",
       startDate: new Date(Date.now() - 1 * 3600e3).toISOString(),
       endDate: new Date(Date.now() + 3 * 3600e3).toISOString(),
       venue: "Taman Haji Sir Muda Omar 'Ali Saifuddien",
@@ -192,7 +192,7 @@ export const SEED_EVENTS: EventConcept[] = [
     updatedAt: NOW,
     s1: {
       eventName: "School Roadshow — Sixth Form Centre",
-      eventRefNo: "KEMS-EVT-0004",
+      eventRefNo: "EVENTLY-EVT-0004",
       startDate: new Date(Date.now() - 14 * 24 * 3600e3).toISOString(),
       endDate: new Date(Date.now() - 14 * 24 * 3600e3 + 3 * 3600e3).toISOString(),
       venue: "Sixth Form Centre",

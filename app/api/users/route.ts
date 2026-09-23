@@ -60,10 +60,10 @@ export async function POST(req: Request) {
   // so the UI won't lie to IT.
   const email = await sendEmail({
     to: user.email,
-    subject: `Welcome to KEMS — set up your ${user.department} account`,
+    subject: `Welcome to Evently — set up your ${user.department} account`,
     body:
       `Hi ${user.fullName},\n\n` +
-      `An account has been created for you on the Kristal Event Management System (KEMS).\n\n` +
+      `An account has been created for you on Evently, Kristal Media's event management system.\n\n` +
       `Role: ${user.role}\n` +
       `Department: ${user.department}\n\n` +
       `To activate your account and set your password, visit:\n${invitationUrl}\n\n` +

@@ -5,7 +5,7 @@
  * anything meaningful.
  *
  * Source of the app's public base URL, in order of preference:
- *   1. `KEMS_PUBLIC_URL` — explicit, purpose-built env var.
+ *   1. `EVENTLY_PUBLIC_URL` — explicit, purpose-built env var.
  *   2. `BETTER_AUTH_URL` — derived by stripping the trailing `/api/auth`
  *      that better-auth needs (see app/api/auth/[...all]/route.ts for why
  *      that suffix is there). Convenient in the common case where an admin
@@ -19,7 +19,7 @@
  */
 
 function getPublicOrigin(): string | null {
-  const explicit = process.env.KEMS_PUBLIC_URL?.trim();
+  const explicit = process.env.EVENTLY_PUBLIC_URL?.trim();
   if (explicit) return stripTrailingSlash(explicit);
 
   const authUrl = process.env.BETTER_AUTH_URL?.trim();

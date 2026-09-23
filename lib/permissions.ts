@@ -95,32 +95,64 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "calendar.view",
     "notifications.view",
   ],
+  ROSTER_ADMIN: [
+    // Baseline read access, same shape as VIEWER, plus budget.view since
+    // roster admins need to see the staffing cost impact of the shifts
+    // they're managing. Deeper roster-editing rights (beyond what a
+    // Manager already gets in lib/kotg-permissions.ts) aren't wired up
+    // yet — this role exists in the enum and carries a sensible floor of
+    // permissions; extending kotg-permissions.ts to recognise it is a
+    // follow-up once the exact roster-admin workflow is specced.
+    "dashboard.view",
+    "events.view",
+    "budget.view",
+    "calendar.view",
+    "reports.view",
+    "notifications.view",
+  ],
+  INVENTORY_ADMIN: [
+    // Same baseline as ROSTER_ADMIN — no inventory-specific screens exist
+    // in the app yet, so there's nothing further to grant until that
+    // surface is built.
+    "dashboard.view",
+    "events.view",
+    "calendar.view",
+    "reports.view",
+    "notifications.view",
+  ],
 };
 
 /**
- * All roles a user holds — primary + optional secondary. Order matters:
- * the primary is always index 0, which some UI surfaces (badges,
- * attribution strings) prefer.
+ * All roles a user holds — primary + optional secondary + optional third.
+ * Order matters: the primary is always index 0, which some UI surfaces
+ * (badges, attribution strings) prefer.
  */
 export function rolesFor(user: User | null | undefined): Role[] {
   if (!user) return [];
-  return user.secondaryRole ? [user.role, user.secondaryRole] : [user.role];
+  const roles: Role[] = [user.role];
+  if (user.secondaryRole) roles.push(user.secondaryRole);
+  if (user.thirdRole) roles.push(user.thirdRole);
+  return roles;
 }
 
 /**
- * Does the user hold this specific role, either as primary or secondary?
+ * Does the user hold this specific role, as primary, secondary, or third?
  * The right call in place of a raw `user.role === "X"` check anywhere in
- * the codebase — otherwise the secondary role goes ignored.
+ * the codebase — otherwise the secondary/third role goes ignored.
  */
 export function hasRole(user: User | null | undefined, role: Role): boolean {
   if (!user) return false;
-  return user.role === role || user.secondaryRole === role;
+  return user.role === role || user.secondaryRole === role || user.thirdRole === role;
 }
 
-/** True if the user holds any of the given roles (primary or secondary). */
+/** True if the user holds any of the given roles (primary, secondary, or third). */
 export function hasAnyRole(user: User | null | undefined, roles: readonly Role[]): boolean {
   if (!user) return false;
-  return roles.includes(user.role) || (!!user.secondaryRole && roles.includes(user.secondaryRole));
+  return (
+    roles.includes(user.role) ||
+    (!!user.secondaryRole && roles.includes(user.secondaryRole)) ||
+    (!!user.thirdRole && roles.includes(user.thirdRole))
+  );
 }
 
 export function isSuperAdmin(user: User | null | undefined): boolean {
@@ -394,4 +426,6 @@ export const ROLE_LABEL: Record<Role, string> = {
   FINANCIAL_ADMIN: "Financial Admin",
   HR: "HR",
   VIEWER: "Viewer",
+  ROSTER_ADMIN: "Roster Admin",
+  INVENTORY_ADMIN: "Inventory Admin",
 };

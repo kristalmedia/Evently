@@ -45,7 +45,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ROLE_LABEL } from "@/lib/permissions";
+import { ROLE_LABEL, isSuperAdmin } from "@/lib/permissions";
 import { formatDate, initials } from "@/lib/utils";
 import { useSessionStore } from "@/stores/session-store";
 import type { Department, Role, User } from "@/lib/types";
@@ -71,6 +71,8 @@ const ROLES: Role[] = [
   "FINANCIAL_ADMIN",
   "HR",
   "VIEWER",
+  "ROSTER_ADMIN",
+  "INVENTORY_ADMIN",
 ];
 
 export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) {
@@ -96,6 +98,9 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
   /** Optional secondary role. Empty string = none — sentinel used because
    *  Radix Select doesn't distinguish undefined vs "not selected". */
   const [editSecondaryRole, setEditSecondaryRole] = useState<Role | "">("");
+  /** Optional third role. Super Admin only — see the isSuperAdmin(currentUser)
+   *  guard around its picker below. Same empty-string-means-none sentinel. */
+  const [editThirdRole, setEditThirdRole] = useState<Role | "">("");
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
@@ -185,12 +190,14 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
     setEditName(u.fullName);
     setEditRole(u.role);
     setEditSecondaryRole(u.secondaryRole ?? "");
+    setEditThirdRole(u.thirdRole ?? "");
   }
 
   function cancelEdit() {
     setEditing(null);
     setEditName("");
     setEditSecondaryRole("");
+    setEditThirdRole("");
   }
 
   async function doDelete() {
@@ -222,10 +229,15 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
       toast.error("Name must be at least 2 characters");
       return;
     }
-    // Reject secondary === primary (a user shouldn't "hold" the same role
-    // twice — permission checks would do the same work anyway).
+    // Reject secondary/third === primary, and third === secondary (a user
+    // shouldn't "hold" the same role twice — permission checks would do
+    // the same work anyway).
     if (editSecondaryRole && editSecondaryRole === editRole) {
       toast.error("Secondary role must differ from primary role");
+      return;
+    }
+    if (editThirdRole && (editThirdRole === editRole || editThirdRole === editSecondaryRole)) {
+      toast.error("Third role must differ from the primary and secondary roles");
       return;
     }
     const res = await fetch(apiPath(`/api/users/${id}`), {
@@ -234,9 +246,14 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
       body: JSON.stringify({
         fullName: trimmed,
         role: editRole,
-        // Explicit null (not undefined) tells the API "clear the secondary role"
-        // — matches the "None" option in the dropdown.
+        // Explicit null (not undefined) tells the API "clear the role"
+        // — matches the "None" option in each dropdown. The third-role
+        // field is only ever rendered (and thus only ever non-empty) for
+        // a Super Admin viewer — see the picker below — but the server
+        // enforces this independently too (the whole route is
+        // Super-Admin-gated).
         secondaryRole: editSecondaryRole === "" ? null : editSecondaryRole,
+        thirdRole: editThirdRole === "" ? null : editThirdRole,
       }),
     });
     if (!res.ok) {
@@ -364,6 +381,32 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
                               ))}
                             </SelectContent>
                           </Select>
+                          {/* Third role — Super Admin only, both to set and to view being
+                              set. The whole /users page already redirects non-Super-Admins
+                              away (see app/(main)/users/page.tsx), so in practice only a
+                              Super Admin ever reaches this render path; the check here is
+                              defense-in-depth so that invariant isn't the only thing
+                              standing between a lower-privileged viewer and this control. */}
+                          {isSuperAdmin(currentUser) && (
+                            <Select
+                              value={editThirdRole === "" ? "__NONE__" : editThirdRole}
+                              onValueChange={(v) =>
+                                setEditThirdRole(v === "__NONE__" ? "" : (v as Role))
+                              }
+                            >
+                              <SelectTrigger className="w-[180px]" aria-label="Third role (optional, Super Admin only)">
+                                <SelectValue placeholder="+ Third role (Super Admin only)" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__NONE__">— None —</SelectItem>
+                                {ROLES.filter((r) => r !== editRole && r !== editSecondaryRole).map((r) => (
+                                  <SelectItem key={r} value={r}>
+                                    {ROLE_LABEL[r]}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
                         </div>
                       ) : (
                         <div className="flex flex-col items-start gap-1">
@@ -373,6 +416,14 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
                           {u.secondaryRole && (
                             <Badge variant="outline" className="text-[0.62rem]">
                               + {ROLE_LABEL[u.secondaryRole]}
+                            </Badge>
+                          )}
+                          {/* Third role is Super-Admin-set but visible to anyone who can
+                              see this table at all (viewing isn't the restricted part —
+                              editing is). */}
+                          {u.thirdRole && (
+                            <Badge variant="outline" className="text-[0.62rem]">
+                              + {ROLE_LABEL[u.thirdRole]}
                             </Badge>
                           )}
                         </div>

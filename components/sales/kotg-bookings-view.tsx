@@ -302,7 +302,7 @@ export function KotgBookingsView({
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          {/* Cross-link to the KEMS event detail page —
+                          {/* Cross-link to the Evently event detail page —
                               the /events/[id] route resolves BookingID
                               back to this Sheet row via the shadow store. */}
                           <Button asChild variant="ghost" size="sm" className="gap-1">
