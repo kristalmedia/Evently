@@ -49,6 +49,11 @@ import { ROLE_LABEL, isSuperAdmin } from "@/lib/permissions";
 import { formatDate, initials } from "@/lib/utils";
 import { useSessionStore } from "@/stores/session-store";
 import type { Department, Role, User } from "@/lib/types";
+import type { InventoryDept } from "@/lib/inventory-types";
+import {
+  INVENTORY_DEPT_LABEL,
+  INVENTORY_DEPT_ORDER,
+} from "@/lib/inventory-types";
 import { apiPath } from "@/lib/api-path";
 
 const DEPARTMENTS: Department[] = [
@@ -101,6 +106,9 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
   /** Optional third role. Super Admin only — see the isSuperAdmin(currentUser)
    *  guard around its picker below. Same empty-string-means-none sentinel. */
   const [editThirdRole, setEditThirdRole] = useState<Role | "">("");
+  /** Which inventory department this user (if INVENTORY_ADMIN) can edit.
+   *  Same "" = none sentinel; Super Admin only. */
+  const [editInventoryDept, setEditInventoryDept] = useState<InventoryDept | "">("");
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
@@ -191,6 +199,7 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
     setEditRole(u.role);
     setEditSecondaryRole(u.secondaryRole ?? "");
     setEditThirdRole(u.thirdRole ?? "");
+    setEditInventoryDept(u.inventoryDept ?? "");
   }
 
   function cancelEdit() {
@@ -198,6 +207,7 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
     setEditName("");
     setEditSecondaryRole("");
     setEditThirdRole("");
+    setEditInventoryDept("");
   }
 
   async function doDelete() {
@@ -254,6 +264,7 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
         // Super-Admin-gated).
         secondaryRole: editSecondaryRole === "" ? null : editSecondaryRole,
         thirdRole: editThirdRole === "" ? null : editThirdRole,
+        inventoryDept: editInventoryDept === "" ? null : editInventoryDept,
       }),
     });
     if (!res.ok) {
@@ -407,6 +418,30 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
                               </SelectContent>
                             </Select>
                           )}
+                          {/* Inventory department scope — only meaningful when this user
+                              holds INVENTORY_ADMIN (primary, secondary, or third), but
+                              always editable by a Super Admin viewer so it can be pre-set
+                              or cleared alongside the role. */}
+                          {isSuperAdmin(currentUser) && (
+                            <Select
+                              value={editInventoryDept === "" ? "__NONE__" : editInventoryDept}
+                              onValueChange={(v) =>
+                                setEditInventoryDept(v === "__NONE__" ? "" : (v as InventoryDept))
+                              }
+                            >
+                              <SelectTrigger className="w-[180px]" aria-label="Inventory department (for Inventory Admin)">
+                                <SelectValue placeholder="+ Inventory dept" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__NONE__">— None —</SelectItem>
+                                {INVENTORY_DEPT_ORDER.map((d) => (
+                                  <SelectItem key={d} value={d}>
+                                    {INVENTORY_DEPT_LABEL[d]}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
                         </div>
                       ) : (
                         <div className="flex flex-col items-start gap-1">
@@ -424,6 +459,11 @@ export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) 
                           {u.thirdRole && (
                             <Badge variant="outline" className="text-[0.62rem]">
                               + {ROLE_LABEL[u.thirdRole]}
+                            </Badge>
+                          )}
+                          {u.inventoryDept && (
+                            <Badge variant="outline" className="text-[0.62rem]">
+                              Inv: {INVENTORY_DEPT_LABEL[u.inventoryDept]}
                             </Badge>
                           )}
                         </div>

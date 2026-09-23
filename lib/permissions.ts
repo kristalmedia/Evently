@@ -28,6 +28,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "calendar.view",
     "reports.view",
     "notifications.view",
+    "inventory.view",
   ],
   CCM_ADMIN: [
     // Mirror of SALES_ADMIN, scoped to CCM-department event ownership.
@@ -44,6 +45,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "calendar.view",
     "reports.view",
     "notifications.view",
+    "inventory.view",
   ],
   MANAGER: [
     // Staff editor (per-event, status-gated). Also handles Sign-off (s8).
@@ -55,6 +57,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "calendar.view",
     "reports.view",
     "notifications.view",
+    "inventory.view",
   ],
   FINANCE_LEAD: [
     // Putri — exclusive Financial editor (status-gated). Global read.
@@ -65,6 +68,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "calendar.view",
     "reports.view",
     "notifications.view",
+    "inventory.view",
   ],
   FINANCIAL_ADMIN: [
     // Rudy — Second Approver in the sign-off chain. Financial edit was
@@ -75,6 +79,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "calendar.view",
     "reports.view",
     "notifications.view",
+    "inventory.view",
   ],
   HR: [
     // HR owns the overtime + meal-allowance block on every KOTG booking
@@ -88,12 +93,14 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "calendar.view",
     "reports.view",
     "notifications.view",
+    "inventory.view",
   ],
   VIEWER: [
     "dashboard.view",
     "events.view",
     "calendar.view",
     "notifications.view",
+    "inventory.view",
   ],
   ROSTER_ADMIN: [
     // Baseline read access, same shape as VIEWER, plus budget.view since
@@ -109,16 +116,20 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "calendar.view",
     "reports.view",
     "notifications.view",
+    "inventory.view",
   ],
   INVENTORY_ADMIN: [
-    // Same baseline as ROSTER_ADMIN — no inventory-specific screens exist
-    // in the app yet, so there's nothing further to grant until that
-    // surface is built.
+    // Baseline read across common surfaces, plus inventory.edit — which
+    // is department-scoped by User.inventoryDept, enforced at the endpoint
+    // and UI layer (see lib/inventory-permissions.ts). Holding
+    // inventory.edit by itself doesn't authorise editing every dept.
     "dashboard.view",
     "events.view",
     "calendar.view",
     "reports.view",
     "notifications.view",
+    "inventory.view",
+    "inventory.edit",
   ],
 };
 

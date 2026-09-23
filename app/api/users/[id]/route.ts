@@ -3,6 +3,8 @@ import { getSession } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { getUserById, logAudit, upsertUser } from "@/lib/store";
 import type { Role } from "@/lib/types";
+import type { InventoryDept } from "@/lib/inventory-types";
+import { INVENTORY_DEPT_LABEL } from "@/lib/inventory-types";
 
 /**
  * PATCH — Super Admin only. Update a user's name and/or roles.
@@ -38,7 +40,18 @@ export async function PATCH(
     role?: Role;
     secondaryRole?: Role | null;
     thirdRole?: Role | null;
+    inventoryDept?: InventoryDept | null;
   };
+  if (
+    body.inventoryDept !== undefined &&
+    body.inventoryDept !== null &&
+    !(body.inventoryDept in INVENTORY_DEPT_LABEL)
+  ) {
+    return NextResponse.json(
+      { error: `inventoryDept must be one of ${Object.keys(INVENTORY_DEPT_LABEL).join(", ")}` },
+      { status: 400 },
+    );
+  }
 
   // Reject secondary/third === primary, and third === secondary — makes no
   // sense and would silently become dead weight in every permission check.
@@ -60,6 +73,11 @@ export async function PATCH(
     );
   }
 
+  const nextInventoryDeptRaw =
+    body.inventoryDept === undefined
+      ? existing.inventoryDept
+      : body.inventoryDept ?? undefined;
+
   const updated = {
     ...existing,
     ...(body.fullName ? { fullName: body.fullName } : {}),
@@ -69,6 +87,7 @@ export async function PATCH(
     // elsewhere; normalise to undefined here).
     secondaryRole: nextSecondaryRaw,
     thirdRole: nextThirdRaw,
+    inventoryDept: nextInventoryDeptRaw,
   };
   upsertUser(updated);
 
@@ -89,6 +108,14 @@ export async function PATCH(
     changes.push(
       `thirdRole: ${existing.thirdRole ?? "—"} → ${body.thirdRole ?? "—"}`
     );
+  }
+  if (
+    body.inventoryDept !== undefined &&
+    (body.inventoryDept ?? undefined) !== existing.inventoryDept
+  ) {
+    const oldLabel = existing.inventoryDept ? INVENTORY_DEPT_LABEL[existing.inventoryDept] : "—";
+    const newLabel = body.inventoryDept ? INVENTORY_DEPT_LABEL[body.inventoryDept] : "—";
+    changes.push(`inventoryDept: ${oldLabel} → ${newLabel}`);
   }
   if (changes.length) {
     logAudit({

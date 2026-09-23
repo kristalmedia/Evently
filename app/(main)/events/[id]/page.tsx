@@ -47,6 +47,8 @@ import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
 import { DeptRosterEditor } from "@/components/kotg/dept-roster-editor";
 import { HrEditor, type FlatRosterRow } from "@/components/kotg/hr-editor";
 import { ConfirmedRosterEditor } from "@/components/kotg/confirmed-roster-editor";
+import { EventInventoryView } from "@/components/inventory/event-inventory-view";
+import { listCatalogItems, getEventInventory } from "@/lib/inventory-store";
 import { formatBND, formatDateTime } from "@/lib/utils";
 
 const DEPT_LABEL: Record<string, string> = {
@@ -133,6 +135,13 @@ export default async function EventDetailPage({
     if (d !== 0) return d;
     return a.start.localeCompare(b.start);
   });
+
+  // Inventory checklist — global catalog + this booking's per-item ticks.
+  // Visible to every authenticated user; only edit-able by department-
+  // scoped Inventory Admins and Super Admin (enforced inside the component
+  // and again server-side in /api/inventory/event/[bookingId]).
+  const inventoryItems = listCatalogItems();
+  const inventoryRecord = getEventInventory(bookingId);
 
   return (
     <div className="space-y-8">
@@ -431,6 +440,20 @@ export default async function EventDetailPage({
           </CardContent>
         </Card>
       )}
+
+      {/* Inventory checklist — global catalog per department, per-event
+          ticks (Required / Quantity / Prepared / Warehouse). Read-only
+          for everyone except the dept-scoped Inventory Admin and Super
+          Admin (see lib/inventory-permissions.ts). Includes CSV + PDF
+          export buttons in its header. */}
+      <EventInventoryView
+        bookingId={bookingId}
+        displayTitle={kotgDisplayTitle(kotg)}
+        clientName={kotgOrganizerLabel(kotg)}
+        venue={kotg.booking.LocationDetails || undefined}
+        items={inventoryItems}
+        initialTicks={inventoryRecord.ticks}
+      />
     </div>
   );
 }

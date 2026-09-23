@@ -75,6 +75,15 @@ export interface User {
    */
   thirdRole?: Role;
   /**
+   * Which inventory department this user (if they hold INVENTORY_ADMIN)
+   * is allowed to edit on the /inventory page and inside the per-event
+   * inventory checklist. Only meaningful for users holding
+   * INVENTORY_ADMIN; ignored otherwise. See lib/inventory-permissions.ts
+   * for the exact rule. Editable by Super Admins only, via the Users
+   * page — same protection as thirdRole above.
+   */
+  inventoryDept?: import("./inventory-types").InventoryDept;
+  /**
    * ISO timestamp of when the user last acknowledged the onboarding
    * tutorial (either by dismissing it or by ticking "Don't show again").
    * Unset means they haven't seen it — the modal fires on next login.
@@ -120,7 +129,9 @@ export type Permission =
   | "roles.manage"
   | "system.settings"
   | "reports.view"
-  | "notifications.view";
+  | "notifications.view"
+  | "inventory.view"
+  | "inventory.edit";
 
 // ─── Event Concept (mirrors the KM-EVT-CONCEPT-v1 template) ────────────────
 
