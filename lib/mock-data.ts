@@ -43,6 +43,12 @@ export const SEED_USERS: User[] = [
   u({ id: "u_c04", fullName: "Azim Mohamad", email: "azim.mohamad@kristal.media", department: "CCM", role: "VIEWER" }),
   u({ id: "u_c05", fullName: "Faiq Ali", email: "faiq.ali@kristal.media", department: "CCM", role: "VIEWER" }),
   u({ id: "u_c06", fullName: "Yaya Halim", email: "yaya.halim@kristal.media", department: "CCM", role: "VIEWER" }),
+  // NOTE: personal @gmail.com address, not @kristal.media — this user
+  // cannot sign in via Microsoft Entra ID (wrong tenant entirely) and the
+  // seeded test-login is disabled in production, so they currently have
+  // no way to actually sign in. Needs an @kristal.media account or an
+  // Entra guest invite (Azure admin action) before they can log in.
+  u({ id: "u_c07", fullName: "Dyg Nurnadhirah binti Hj Md Baharuddin Shah", email: "nurnadhirah.bakar@gmail.com", department: "CCM", role: "VIEWER" }),
 
   // ─── Technical — Viewer ──────────────────────────────────────────────────
   u({ id: "u_t01", fullName: "Aiman Bahar", email: "aiman.bahar@kristal.media", department: "Technical", role: "VIEWER" }),
@@ -54,6 +60,9 @@ export const SEED_USERS: User[] = [
   u({ id: "u_t07", fullName: "Izz Yakop", email: "Izz.Yakop@kristal.media", department: "Technical", role: "VIEWER" }),
   u({ id: "u_t08", fullName: "Rafaiee Omar", email: "rafaiee.omar@kristal.media", department: "Technical", role: "VIEWER" }),
   u({ id: "u_t09", fullName: "Qawi Zainal Ariffin", email: "qawi.zainalariffin@kristal.media", department: "Technical", role: "VIEWER" }),
+  // NOTE: personal @gmail.com address, not @kristal.media — same sign-in
+  // caveat as u_c07 above (no Entra tenant match, test-login is off in prod).
+  u({ id: "u_t10", fullName: "Ahmad Nur Rasif bin Haji Yusri", email: "rasifhy@gmail.com", department: "Technical", role: "VIEWER" }),
 
   // ─── HR — Viewer ─────────────────────────────────────────────────────────
   // Putri — Finance Lead. Exclusive editor of Section 5 (Financial) during
