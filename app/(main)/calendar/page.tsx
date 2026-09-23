@@ -6,6 +6,7 @@ import { getKotgBookingsWithClients } from "@/lib/google-sheets";
 import { reconcileKotgBookings } from "@/lib/kotg-sync";
 import {
   filterVisibleBookings,
+  hasScheduledDate,
   inferKotgCategory,
   kotgDisplayTitle,
   mapKotgBookingToEventStatus,
@@ -28,15 +29,22 @@ export default async function CalendarPage() {
     bookings = [];
   }
 
-  // Split by whether the booking has a start date. FullCalendar can only
-  // render items that carry a date; bookings without one get their own
-  // "Unscheduled" strip above so they don't silently disappear from view.
+  // Split by whether the booking has a genuinely parseable start date —
+  // NOT just a non-empty StartDate cell. The Sheet is hand-typed, and a
+  // booking that's Active but not yet locked in commonly gets "TBC" (or
+  // similar placeholder text) typed into StartDate instead of being left
+  // blank. A plain truthy check would treat that as "has a date" and hand
+  // FullCalendar an unparseable string, which it silently drops — the
+  // booking then never appears anywhere on the page. hasScheduledDate
+  // validates the string actually parses before routing it to the
+  // calendar grid, so every visible booking ends up somewhere: either on
+  // the calendar or in the Unscheduled strip below.
   const scheduled = bookings
-    .filter((b) => !!b.booking.StartDate)
+    .filter(hasScheduledDate)
     .map(projectKotgCalendarItem);
 
   const unscheduled = bookings
-    .filter((b) => !b.booking.StartDate)
+    .filter((b) => !hasScheduledDate(b))
     .map((b) => ({
       id: b.booking.BookingID,
       title: kotgDisplayTitle(b),

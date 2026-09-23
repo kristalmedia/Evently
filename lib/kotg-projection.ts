@@ -35,6 +35,81 @@ export function filterVisibleBookings(
   return bookings.filter((b) => isVisibleBookingStatus(b.booking.Status));
 }
 
+/** Matches an already-ISO "YYYY-MM-DD" date, optionally with a time
+ *  component tacked on — passed straight through unchanged. */
+const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})/;
+
+/** Matches DD/MM/YYYY or DD-MM-YYYY — the day-first format Google Sheets
+ *  renders dates in for locales like ours. */
+const DAY_FIRST_DATE_RE = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/;
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/** Normalizes a Sheet date cell into a plain "YYYY-MM-DD" string, or null
+ *  if it isn't a real date. The Sheet is hand-typed and read via the
+ *  Sheets API's default FORMATTED_VALUE mode, so a "date" cell can come
+ *  back as an ISO string, a locale-formatted day-first string
+ *  ("25/09/2026"), or plain placeholder text ("TBC", "TBD", blank) for a
+ *  booking that's Active but not yet locked in.
+ *
+ *  Deliberately does the ISO and day-first cases as pure string
+ *  manipulation rather than round-tripping through a `Date` object and
+ *  reading back y/m/d — `new Date("2026-09-25")` is UTC midnight per the
+ *  ECMAScript spec, while `new Date(2026, 8, 25)` (what you'd build for
+ *  the day-first case) is local time, so reading both back through the
+ *  same getters would silently shift one of them by a day depending on
+ *  the server's timezone. Working on the string directly sidesteps that
+ *  entirely for the two formats we actually expect. Any other
+ *  native-parseable format (e.g. "Sep 25, 2026") is rare enough here that
+ *  we fall back to `Date` + local getters for it and accept the small
+ *  residual timezone risk. JS's Date constructor also doesn't reliably
+ *  reject day-first strings — for a day ≤ 12 it happily reinterprets
+ *  "25/09/2026"-shaped input as month=25 (invalid) or, worse, silently
+ *  swaps day/month with no error — so day-first must be tried explicitly
+ *  rather than left to native parsing. */
+export function normalizeSheetDate(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  const iso = trimmed.match(ISO_DATE_RE);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+
+  const dayFirst = trimmed.match(DAY_FIRST_DATE_RE);
+  if (dayFirst) {
+    const day = Number(dayFirst[1]);
+    const month = Number(dayFirst[2]);
+    const year = Number(dayFirst[3]);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${pad2(month)}-${pad2(day)}`;
+    }
+    // Day-first didn't produce a valid month (e.g. "9/25/2026" — day=9,
+    // "month"=25) — this is unambiguously NOT a day-first date, so fall
+    // through to native parsing instead of giving up, which correctly
+    // recovers US month/day-ordered input like this one.
+  }
+
+  const native = new Date(trimmed);
+  if (!Number.isNaN(native.getTime())) {
+    return `${native.getFullYear()}-${pad2(native.getMonth() + 1)}-${pad2(native.getDate())}`;
+  }
+  return null;
+}
+
+/** Does this booking have a StartDate that's actually a real, parseable
+ *  date — not just a non-empty string? A naive `!!booking.StartDate`
+ *  truthy check treats placeholder text like "TBC" as "has a date",
+ *  which silently drops the booking from FullCalendar (it can't place an
+ *  event with an unparseable start) with no visible sign anything went
+ *  wrong — the booking just never appears anywhere. Every caller that
+ *  needs to decide "does this belong on the calendar grid" should use
+ *  this instead of checking StartDate for truthiness directly. */
+export function hasScheduledDate(booking: KotgBookingWithClient): boolean {
+  return normalizeSheetDate(booking.booking.StartDate) !== null;
+}
+
 /** Derives the UI EventStatus from the pair (Sheet booking status, Evently
  *  shadow.eventlyStatus). Called for every row every render, so kept as a
  *  pure lookup with no side effects.
@@ -119,12 +194,14 @@ export function projectKotgBookingRow(
     shadow?.eventlyStatus,
   );
   const now = Date.now();
-  const start = booking.booking.StartDate
-    ? +new Date(booking.booking.StartDate)
-    : 0;
-  const end = booking.booking.EndDate
-    ? +new Date(booking.booking.EndDate)
-    : start;
+  // Same day-first-date pitfall as projectKotgCalendarItem — go through
+  // normalizeSheetDate rather than `+new Date(rawString)` directly, or a
+  // "25/09/2026"-style StartDate parses as NaN and this booking silently
+  // never counts as "live" no matter what today's date is.
+  const normalizedStart = normalizeSheetDate(booking.booking.StartDate);
+  const normalizedEnd = normalizeSheetDate(booking.booking.EndDate);
+  const start = normalizedStart ? +new Date(normalizedStart) : 0;
+  const end = normalizedEnd ? +new Date(normalizedEnd) : start;
   const isLive =
     status !== "CANCELLED" &&
     status !== "COMPLETED" &&
@@ -163,11 +240,22 @@ export function projectKotgCalendarItem(
   venue?: string;
 } {
   const shadow = getShadowEvent(booking.booking.BookingID);
+  // Normalize both dates through the same day-first-aware parser that
+  // hasScheduledDate uses, rather than handing FullCalendar the raw Sheet
+  // string — a day-first "25/09/2026" StartDate would pass
+  // hasScheduledDate but still fail to place on the calendar if we didn't
+  // convert it to "2026-09-25" here too. Callers of this function are
+  // expected to have already filtered to hasScheduledDate(booking)
+  // bookings, so `start` should never actually be null in practice — the
+  // fallback to the raw string is just so a caller that skips that
+  // filter doesn't get `start: undefined` handed to FullCalendar.
+  const start = normalizeSheetDate(booking.booking.StartDate) ?? booking.booking.StartDate;
+  const end = normalizeSheetDate(booking.booking.EndDate) ?? undefined;
   return {
     id: booking.booking.BookingID,
     title: kotgDisplayTitle(booking),
-    start: booking.booking.StartDate,
-    end: booking.booking.EndDate || undefined,
+    start,
+    end,
     status: mapKotgBookingToEventStatus(booking.booking.Status, shadow?.eventlyStatus),
     category: inferKotgCategory(booking),
     description: booking.booking.Notes || undefined,
