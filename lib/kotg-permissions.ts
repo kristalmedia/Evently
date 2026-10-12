@@ -1,4 +1,4 @@
-import type { User } from "./types";
+import type { Role, User } from "./types";
 import type { ShadowEventEventlyStatus } from "./shadow-events-types";
 import type { ShadowDeptKey } from "./shadow-events-types";
 import {
@@ -14,32 +14,50 @@ import { MANAGER_DEPT_KEYS } from "./shadow-events";
  * bookings. Separated from lib/permissions.ts because these rules
  * depend on the shadow record's eventlyStatus, which lib/permissions is
  * deliberately kept independent of.
+ *
+ * Roster surfaces (view AND edit) are gated to exactly three roles —
+ * MANAGER, ROSTER_ADMIN, INVENTORY_ADMIN. This narrower-than-default
+ * matrix is deliberate (explicit product decision, see commit message)
+ * and intentionally departs from the "Super Admin bypasses everything"
+ * pattern used elsewhere in the app: Super Admin has NO roster access
+ * unless they also hold one of the three authorised roles.
+ *
+ * HR's separate meal-ticks / OT editor (canEditHr, canEditHrOvertime
+ * below) is NOT part of "the roster" and still grants HR access as
+ * before — HR's OT/meal workflow would otherwise be unperformable, and
+ * removing it was out of scope for the roster-access change.
  */
+export const ROSTER_AUTHORIZED_ROLES: readonly Role[] = [
+  "MANAGER",
+  "ROSTER_ADMIN",
+  "INVENTORY_ADMIN",
+];
+
+/** Does this user hold any role that grants roster-feature access?
+ *  Baseline for every other roster helper in this file — if this is
+ *  false, the user sees no roster surfaces at all. */
+export function canAccessRoster(user: User | null | undefined): boolean {
+  if (!user || user.status === "disabled") return false;
+  return hasAnyRole(user, ROSTER_AUTHORIZED_ROLES);
+}
 
 /** Which department roster block, if any, can this user edit right now?
  *  Returns the dept key (e.g. "SALES", "TECH") or null.
  *
- *  Rules:
- *    - Super Admin: can edit any dept; caller passes the target key.
- *    - Manager whose User.department maps to a dept key: that key.
- *    - Everyone else: null.
+ *  Managers remain dept-scoped — they can edit ONLY their own
+ *  department's roster, derived from User.department. Roster/Inventory
+ *  Admins have no equivalent dept-scoping field, so they're handled in
+ *  canEditDept directly as "edit any dept" callers.
  *
- *  Managers can edit their own dept's roster at ANY eventlyStatus,
+ *  Managers can edit their own dept's roster at any eventlyStatus,
  *  including after their own block is marked complete and after the
  *  event is fully Confirmed (PUBLISHED) — last-minute corrections to a
- *  completed/past roster are explicitly allowed, not just the broader
- *  "any Manager can edit any dept" exception that kicks in at PUBLISHED
- *  (see canEditDept below). There is deliberately no stage-based freeze
- *  here any more, so this no longer takes an eventlyStatus argument. */
+ *  completed/past roster are explicitly allowed. There is no stage-
+ *  based freeze. */
 export function editableDeptForManager(
   user: User | null | undefined,
 ): ShadowDeptKey | null {
   if (!user || user.status === "disabled") return null;
-
-  // Super Admin bypass — surface a sentinel the caller can special-case
-  // ("edit any"); most callers should use `canEditDept` for that check.
-  if (isSuperAdmin(user)) return null;
-
   if (!hasRole(user, "MANAGER")) return null;
 
   const key = rosterDeptKeyForDepartment(user.department);
@@ -51,46 +69,43 @@ export function editableDeptForManager(
 }
 
 /** Full authorisation check for editing a specific dept's roster block.
- *  Super Admin can edit any dept; Managers only their own (see rules on
- *  editableDeptForManager).
+ *  Only the three ROSTER_AUTHORIZED_ROLES hold roster edit rights:
+ *    - MANAGER: edits only their own department (dept-scoped via
+ *      editableDeptForManager).
+ *    - ROSTER_ADMIN / INVENTORY_ADMIN: edit any department (no dept-
+ *      scoping field exists for them).
  *
- *  Post-confirmation exception: once eventlyStatus reaches PUBLISHED
- *  (the event is "Confirmed"), ANY Manager, HR, or Super Admin can
- *  edit ANY dept's roster — this is the last-minute-changes surface
- *  called out in the spec. The confirmed-event page renders a single
- *  unified roster table that saves per-dept via this same endpoint. */
+ *  HR, Finance Lead, and Super Admin have NO roster edit access — this
+ *  is intentional per the roster-access-restriction spec. Super Admin
+ *  users who need roster edit must additionally hold MANAGER /
+ *  ROSTER_ADMIN / INVENTORY_ADMIN as a secondary/third role. The
+ *  eventlyStatus argument is retained for API-signature stability but
+ *  no longer gates anything here. */
 export function canEditDept(
   user: User | null | undefined,
   deptKey: ShadowDeptKey,
-  eventlyStatus: ShadowEventEventlyStatus,
+  _eventlyStatus: ShadowEventEventlyStatus,
 ): boolean {
-  if (!user || user.status === "disabled") return false;
+  if (!canAccessRoster(user)) return false;
 
-  // Post-confirmation: any Manager / HR / Super Admin can edit any dept.
-  if (eventlyStatus === "PUBLISHED") {
-    if (isSuperAdmin(user)) return true;
-    return hasRole(user, "MANAGER") || hasRole(user, "HR");
+  // Roster/Inventory Admins — any dept.
+  if (hasRole(user, "ROSTER_ADMIN") || hasRole(user, "INVENTORY_ADMIN")) {
+    return true;
   }
 
-  if (isSuperAdmin(user)) {
-    // Super Admin can edit any dept, but only until the workflow
-    // reaches HR (then the roster freezes for HR to work with) —
-    // resumes above at PUBLISHED for last-minute changes.
-    return eventlyStatus === "ACTIVE" || eventlyStatus === "MANAGERS_IN_PROGRESS";
-  }
+  // Pure Manager (no roster-admin / inventory-admin hat) — own dept only.
   return editableDeptForManager(user) === deptKey;
 }
 
 /** Whether the current user is allowed to edit any confirmed-event
  *  roster (i.e. after PUBLISHED, from the unified "Who's working"
- *  table). Convenience wrapper around canEditDept for a UI-side
- *  render-or-hide check. */
+ *  table). Convenience wrapper around canAccessRoster for a UI-side
+ *  render-or-hide check — the three authorised roles can all make
+ *  last-minute edits via the confirmed-event unified table. */
 export function canEditConfirmedRoster(
   user: User | null | undefined,
 ): boolean {
-  if (!user || user.status === "disabled") return false;
-  if (isSuperAdmin(user)) return true;
-  return hasRole(user, "MANAGER") || hasRole(user, "HR");
+  return canAccessRoster(user);
 }
 
 /** HR can edit their block (meal ticks + "Mark complete" gesture) once
@@ -149,48 +164,41 @@ export function canEditFinance(
   return hasRole(user, "FINANCE_LEAD") && eventlyStatus === "FINANCE_UNLOCKED";
 }
 
-/** Read access to the full roster (not just one dept). Post the HR
- *  unlock, HR sees every dept's block; before then, only Super Admin
- *  and the dept's own Manager see their block.
+/** Read access to the full roster (not just one dept).
  *
- *  Once the roster is "done" — every Manager block flagged complete,
- *  i.e. eventlyStatus reaches HR_UNLOCKED or later — every viewer gets
- *  read access to every dept's slots. The event detail page becomes
- *  the shared source of truth for who's on shift, which is what people
- *  reach for once the planning phase closes. */
+ *  Only the three ROSTER_AUTHORIZED_ROLES see the roster at all:
+ *    - MANAGER: sees only their own department's block (dept-scoped).
+ *    - ROSTER_ADMIN / INVENTORY_ADMIN: see every dept.
+ *
+ *  The eventlyStatus argument is retained for API-signature stability
+ *  but no longer unlocks additional viewers at HR_UNLOCKED+ — that
+ *  broader "once planning closes, everyone can see" rule is gone. */
 export function canViewFullRoster(
   user: User | null | undefined,
-  eventlyStatus: ShadowEventEventlyStatus,
+  _eventlyStatus: ShadowEventEventlyStatus,
 ): boolean {
-  if (!user || user.status === "disabled") return false;
-  if (isSuperAdmin(user)) return true;
-
-  // Once managers finish, the roster is a shared read for everyone.
-  // Same threshold that unlocks HR — the "roster is done" moment.
-  if (
-    eventlyStatus === "HR_UNLOCKED" ||
-    eventlyStatus === "FINANCE_UNLOCKED" ||
-    eventlyStatus === "PUBLISHED"
-  ) {
-    return true;
-  }
-
-  // Pre-completion: only role-based readers get full roster access
-  // (there is currently none before HR_UNLOCKED — Managers see their
-  // own dept via visibleDeptKeysForShadow; kept as a hook if a future
-  // role needs earlier full-read).
-  return false;
+  if (!canAccessRoster(user)) return false;
+  // Managers are dept-scoped (visibleDeptKeysForShadow returns just
+  // their own key); only Roster/Inventory Admins see every dept.
+  return hasRole(user, "ROSTER_ADMIN") || hasRole(user, "INVENTORY_ADMIN");
 }
 
 /** Which dept keys should this user see on the event detail page's
- *  roster grid? A Manager sees only their own; anyone with full-roster
- *  read (Super Admin, HR post-unlock, Finance Lead post-unlock) sees all. */
+ *  roster grid? Only the three ROSTER_AUTHORIZED_ROLES see anything:
+ *    - MANAGER: just their own department.
+ *    - ROSTER_ADMIN / INVENTORY_ADMIN: every department.
+ *    - Everyone else: an empty list — the roster surface doesn't render. */
 export function visibleDeptKeysForShadow(
   user: User | null | undefined,
-  eventlyStatus: ShadowEventEventlyStatus,
+  _eventlyStatus: ShadowEventEventlyStatus,
 ): readonly ShadowDeptKey[] {
-  if (!user || user.status === "disabled") return [];
-  if (canViewFullRoster(user, eventlyStatus)) return MANAGER_DEPT_KEYS;
+  if (!user) return [];
+  if (!canAccessRoster(user)) return [];
+
+  if (hasRole(user, "ROSTER_ADMIN") || hasRole(user, "INVENTORY_ADMIN")) {
+    return MANAGER_DEPT_KEYS;
+  }
+
   if (hasAnyRole(user, ["MANAGER"])) {
     const own = rosterDeptKeyForDepartment(user.department);
     if (own && (MANAGER_DEPT_KEYS as readonly string[]).includes(own)) {
