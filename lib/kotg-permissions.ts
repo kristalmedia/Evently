@@ -41,44 +41,53 @@ export function canAccessRoster(user: User | null | undefined): boolean {
   return hasAnyRole(user, ROSTER_AUTHORIZED_ROLES);
 }
 
-/** Which department roster block, if any, can this user edit right now?
- *  Returns the dept key (e.g. "SALES", "TECH") or null.
+/** The single roster dept this user is dept-scoped to, derived from
+ *  User.department. Returns null for users whose department doesn't
+ *  map to any ShadowDeptKey (General Manager, Unassigned, HR,
+ *  Finance). This is the mechanism Managers AND Roster Admins both
+ *  use to be scoped to their own department; INVENTORY_ADMIN is NOT
+ *  dept-scoped on the roster side and gets all-dept access.
  *
- *  Managers remain dept-scoped — they can edit ONLY their own
- *  department's roster, derived from User.department. Roster/Inventory
- *  Admins have no equivalent dept-scoping field, so they're handled in
- *  canEditDept directly as "edit any dept" callers.
- *
- *  Managers can edit their own dept's roster at any eventlyStatus,
- *  including after their own block is marked complete and after the
- *  event is fully Confirmed (PUBLISHED) — last-minute corrections to a
- *  completed/past roster are explicitly allowed. There is no stage-
- *  based freeze. */
-export function editableDeptForManager(
+ *  Independent of role — the role check is the caller's job. */
+function ownRosterDeptForUser(
   user: User | null | undefined,
 ): ShadowDeptKey | null {
   if (!user || user.status === "disabled") return null;
-  if (!hasRole(user, "MANAGER")) return null;
-
   const key = rosterDeptKeyForDepartment(user.department);
   if (!key) return null;
-  // Filter to the dept keys the shadow store knows about (excludes the
-  // shared DJ pool, which isn't a Manager-owned roster).
+  // Filter to the dept keys the shadow store knows about (excludes
+  // the shared DJ pool, which isn't a Manager-owned roster).
   if (!(MANAGER_DEPT_KEYS as readonly string[]).includes(key)) return null;
   return key as ShadowDeptKey;
 }
 
+/** @deprecated Use ownRosterDeptForUser + a Manager role check at the
+ *  call site. Kept as a named export because external code may still
+ *  import it; semantics are unchanged (null for non-Managers). */
+export function editableDeptForManager(
+  user: User | null | undefined,
+): ShadowDeptKey | null {
+  if (!user || !hasRole(user, "MANAGER")) return null;
+  return ownRosterDeptForUser(user);
+}
+
 /** Full authorisation check for editing a specific dept's roster block.
- *  Only the three ROSTER_AUTHORIZED_ROLES hold roster edit rights:
+ *  Only the three ROSTER_AUTHORIZED_ROLES hold roster edit rights, and
+ *  two of the three are now dept-scoped:
  *    - MANAGER: edits only their own department (dept-scoped via
- *      editableDeptForManager).
- *    - ROSTER_ADMIN / INVENTORY_ADMIN: edit any department (no dept-
- *      scoping field exists for them).
+ *      User.department).
+ *    - ROSTER_ADMIN: edits only their own department (dept-scoped via
+ *      User.department, same mechanism as Manager — per the "roster
+ *      admin only can be access based on their department only" rule).
+ *    - INVENTORY_ADMIN: edits any department. NOT dept-scoped on the
+ *      roster side — User.inventoryDept uses a different enum
+ *      (InventoryDept) that doesn't 1:1 match ShadowDeptKey, and
+ *      narrowing them here would require either a new field or a
+ *      mapping that drops EVENTS/CCM_TECH_OPS/OTHERS admins into "no
+ *      roster access", which wasn't the ask. Flag separately if you
+ *      want them dept-scoped too.
  *
- *  HR, Finance Lead, and Super Admin have NO roster edit access — this
- *  is intentional per the roster-access-restriction spec. Super Admin
- *  users who need roster edit must additionally hold MANAGER /
- *  ROSTER_ADMIN / INVENTORY_ADMIN as a secondary/third role. The
+ *  HR, Finance Lead, and Super Admin have NO roster edit access. The
  *  eventlyStatus argument is retained for API-signature stability but
  *  no longer gates anything here. */
 export function canEditDept(
@@ -88,20 +97,22 @@ export function canEditDept(
 ): boolean {
   if (!canAccessRoster(user)) return false;
 
-  // Roster/Inventory Admins — any dept.
-  if (hasRole(user, "ROSTER_ADMIN") || hasRole(user, "INVENTORY_ADMIN")) {
-    return true;
+  // Inventory Admin — all depts (not dept-scoped on the roster side).
+  if (hasRole(user, "INVENTORY_ADMIN")) return true;
+
+  // Manager OR Roster Admin — own dept only, via User.department.
+  if (hasRole(user, "MANAGER") || hasRole(user, "ROSTER_ADMIN")) {
+    return ownRosterDeptForUser(user) === deptKey;
   }
 
-  // Pure Manager (no roster-admin / inventory-admin hat) — own dept only.
-  return editableDeptForManager(user) === deptKey;
+  return false;
 }
 
-/** Whether the current user is allowed to edit any confirmed-event
- *  roster (i.e. after PUBLISHED, from the unified "Who's working"
- *  table). Convenience wrapper around canAccessRoster for a UI-side
- *  render-or-hide check — the three authorised roles can all make
- *  last-minute edits via the confirmed-event unified table. */
+/** Whether the current user is allowed to edit a confirmed-event
+ *  roster at all (not WHICH dept). The three authorised roles can all
+ *  make last-minute edits via the confirmed-event unified table — the
+ *  table itself still gates per-row by canEditDept, so a dept-scoped
+ *  Manager/Roster-Admin sees only their own rows as editable. */
 export function canEditConfirmedRoster(
   user: User | null | undefined,
 ): boolean {
@@ -164,30 +175,34 @@ export function canEditFinance(
   return hasRole(user, "FINANCE_LEAD") && eventlyStatus === "FINANCE_UNLOCKED";
 }
 
-/** Read access to the full roster (not just one dept).
+/** Read access to the full roster (every dept, not just one).
  *
- *  Only the three ROSTER_AUTHORIZED_ROLES see the roster at all:
- *    - MANAGER: sees only their own department's block (dept-scoped).
- *    - ROSTER_ADMIN / INVENTORY_ADMIN: see every dept.
+ *  Only INVENTORY_ADMIN gets the full-roster read now — Managers AND
+ *  Roster Admins are both dept-scoped, so they see just their own
+ *  department's block via visibleDeptKeysForShadow.
  *
  *  The eventlyStatus argument is retained for API-signature stability
- *  but no longer unlocks additional viewers at HR_UNLOCKED+ — that
- *  broader "once planning closes, everyone can see" rule is gone. */
+ *  but no longer unlocks additional viewers at HR_UNLOCKED+. */
 export function canViewFullRoster(
   user: User | null | undefined,
   _eventlyStatus: ShadowEventEventlyStatus,
 ): boolean {
   if (!canAccessRoster(user)) return false;
-  // Managers are dept-scoped (visibleDeptKeysForShadow returns just
-  // their own key); only Roster/Inventory Admins see every dept.
-  return hasRole(user, "ROSTER_ADMIN") || hasRole(user, "INVENTORY_ADMIN");
+  return hasRole(user, "INVENTORY_ADMIN");
 }
 
 /** Which dept keys should this user see on the event detail page's
  *  roster grid? Only the three ROSTER_AUTHORIZED_ROLES see anything:
- *    - MANAGER: just their own department.
- *    - ROSTER_ADMIN / INVENTORY_ADMIN: every department.
- *    - Everyone else: an empty list — the roster surface doesn't render. */
+ *    - MANAGER: just their own department (via User.department).
+ *    - ROSTER_ADMIN: just their own department (via User.department) —
+ *      same dept-scoping as Manager.
+ *    - INVENTORY_ADMIN: every department (not dept-scoped; see
+ *      canEditDept doc).
+ *    - Everyone else: an empty list — the roster surface doesn't render.
+ *
+ *  A Manager or Roster Admin whose User.department doesn't map to a
+ *  ShadowDeptKey (HR, Finance, General Manager, Unassigned) sees
+ *  nothing — same behavior as before this change. */
 export function visibleDeptKeysForShadow(
   user: User | null | undefined,
   _eventlyStatus: ShadowEventEventlyStatus,
@@ -195,15 +210,13 @@ export function visibleDeptKeysForShadow(
   if (!user) return [];
   if (!canAccessRoster(user)) return [];
 
-  if (hasRole(user, "ROSTER_ADMIN") || hasRole(user, "INVENTORY_ADMIN")) {
+  if (hasRole(user, "INVENTORY_ADMIN")) {
     return MANAGER_DEPT_KEYS;
   }
 
-  if (hasAnyRole(user, ["MANAGER"])) {
-    const own = rosterDeptKeyForDepartment(user.department);
-    if (own && (MANAGER_DEPT_KEYS as readonly string[]).includes(own)) {
-      return [own as ShadowDeptKey];
-    }
+  if (hasAnyRole(user, ["MANAGER", "ROSTER_ADMIN"])) {
+    const own = ownRosterDeptForUser(user);
+    if (own) return [own];
   }
   return [];
 }
