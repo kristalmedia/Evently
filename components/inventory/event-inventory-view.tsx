@@ -25,16 +25,36 @@ import {
   exportInventoryPdf,
 } from "@/lib/inventory-export";
 import { useSessionStore } from "@/stores/session-store";
-import { hasRole, isSuperAdmin } from "@/lib/permissions";
+import { hasRole, isSuperAdmin, rosterDeptKeyForDepartment } from "@/lib/permissions";
 
+/** Must match ROSTER_DEPT_TO_INVENTORY_DEPT in
+ *  lib/inventory-permissions.ts — the mapping from the roster-side
+ *  ShadowDeptKey the user leads to the InventoryDept they get access to
+ *  under the roster-lead rule. */
+const ROSTER_DEPT_TO_INVENTORY_DEPT: Partial<Record<string, InventoryDept>> = {
+  IT: "IT",
+  SALES: "SALES",
+  TECH: "TECH_OPS",
+};
+
+/** Client-side mirror of canEditInventoryDept — see
+ *  components/inventory/catalog-view.tsx for the identical function.
+ *  Server enforces this rule independently in /api/inventory/*. */
 function canEditDeptClient(
   user: ReturnType<typeof useSessionStore.getState>["user"],
   dept: InventoryDept,
 ): boolean {
   if (!user || user.status === "disabled") return false;
   if (isSuperAdmin(user)) return true;
-  if (!hasRole(user, "INVENTORY_ADMIN")) return false;
-  return user.inventoryDept === dept;
+
+  if (hasRole(user, "MANAGER")) {
+    const rosterKey = rosterDeptKeyForDepartment(user.department);
+    if (rosterKey && ROSTER_DEPT_TO_INVENTORY_DEPT[rosterKey] === dept) return true;
+  }
+
+  if (hasRole(user, "INVENTORY_ADMIN") && user.inventoryDept === dept) return true;
+
+  return false;
 }
 
 export function EventInventoryView({

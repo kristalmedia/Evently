@@ -49,6 +49,10 @@ import { HrEditor, type FlatRosterRow } from "@/components/kotg/hr-editor";
 import { ConfirmedRosterEditor } from "@/components/kotg/confirmed-roster-editor";
 import { EventInventoryView } from "@/components/inventory/event-inventory-view";
 import { listCatalogItems, getEventInventory } from "@/lib/inventory-store";
+import {
+  canViewAnyInventoryDept,
+  canViewInventory,
+} from "@/lib/inventory-permissions";
 import { formatBND, formatDateTime } from "@/lib/utils";
 
 const DEPT_LABEL: Record<string, string> = {
@@ -137,10 +141,14 @@ export default async function EventDetailPage({
   });
 
   // Inventory checklist — global catalog + this booking's per-item ticks.
-  // Visible to every authenticated user; only edit-able by department-
-  // scoped Inventory Admins and Super Admin (enforced inside the component
-  // and again server-side in /api/inventory/event/[bookingId]).
-  const inventoryItems = listCatalogItems();
+  // View and modify go together per the dept-roster-lead rule. Users
+  // see only the sections for depts they lead (via roster) or are
+  // assigned to (via INVENTORY_ADMIN); the inventory card is hidden
+  // entirely from users with no accessible depts.
+  const canSeeInventory = canViewAnyInventoryDept(user);
+  const inventoryItems = canSeeInventory
+    ? listCatalogItems().filter((item) => canViewInventory(user, item.dept))
+    : [];
   const inventoryRecord = getEventInventory(bookingId);
 
   return (
@@ -446,14 +454,16 @@ export default async function EventDetailPage({
           for everyone except the dept-scoped Inventory Admin and Super
           Admin (see lib/inventory-permissions.ts). Includes CSV + PDF
           export buttons in its header. */}
-      <EventInventoryView
-        bookingId={bookingId}
-        displayTitle={kotgDisplayTitle(kotg)}
-        clientName={kotgOrganizerLabel(kotg)}
-        venue={kotg.booking.LocationDetails || undefined}
-        items={inventoryItems}
-        initialTicks={inventoryRecord.ticks}
-      />
+      {canSeeInventory && (
+        <EventInventoryView
+          bookingId={bookingId}
+          displayTitle={kotgDisplayTitle(kotg)}
+          clientName={kotgOrganizerLabel(kotg)}
+          venue={kotg.booking.LocationDetails || undefined}
+          items={inventoryItems}
+          initialTicks={inventoryRecord.ticks}
+        />
+      )}
     </div>
   );
 }

@@ -16,20 +16,37 @@ import {
   INVENTORY_DEPT_ORDER,
 } from "@/lib/inventory-types";
 import { useSessionStore } from "@/stores/session-store";
-import { hasRole, isSuperAdmin } from "@/lib/permissions";
+import { hasRole, isSuperAdmin, rosterDeptKeyForDepartment } from "@/lib/permissions";
+
+/** Client-side mirror of the roster-lead inventory mapping — must match
+ *  ROSTER_DEPT_TO_INVENTORY_DEPT in lib/inventory-permissions.ts. */
+const ROSTER_DEPT_TO_INVENTORY_DEPT: Partial<Record<string, InventoryDept>> = {
+  IT: "IT",
+  SALES: "SALES",
+  TECH: "TECH_OPS",
+};
 
 /** Client-side mirror of canEditInventoryDept — we can't call the
  *  server helper directly from a client component, but the rule is
  *  simple enough to re-encode here for gating UI affordances. The
- *  server enforces it independently (see the /api/inventory routes). */
+ *  server enforces it independently (see the /api/inventory routes).
+ *  Three-way union: Super Admin bypass, roster-lead-for-this-dept,
+ *  or explicit INVENTORY_ADMIN assignment via User.inventoryDept. */
 function canEditDeptClient(
   user: ReturnType<typeof useSessionStore.getState>["user"],
   dept: InventoryDept,
 ): boolean {
   if (!user || user.status === "disabled") return false;
   if (isSuperAdmin(user)) return true;
-  if (!hasRole(user, "INVENTORY_ADMIN")) return false;
-  return user.inventoryDept === dept;
+
+  if (hasRole(user, "MANAGER")) {
+    const rosterKey = rosterDeptKeyForDepartment(user.department);
+    if (rosterKey && ROSTER_DEPT_TO_INVENTORY_DEPT[rosterKey] === dept) return true;
+  }
+
+  if (hasRole(user, "INVENTORY_ADMIN") && user.inventoryDept === dept) return true;
+
+  return false;
 }
 
 export function InventoryCatalogView({ items }: { items: CatalogItem[] }) {

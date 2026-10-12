@@ -28,7 +28,6 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "calendar.view",
     "reports.view",
     "notifications.view",
-    "inventory.view",
   ],
   CCM_ADMIN: [
     // Mirror of SALES_ADMIN, scoped to CCM-department event ownership.
@@ -45,10 +44,13 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "calendar.view",
     "reports.view",
     "notifications.view",
-    "inventory.view",
   ],
   MANAGER: [
     // Staff editor (per-event, status-gated). Also handles Sign-off (s8).
+    // Also sees the Inventory sidebar entry — a Manager of IT/Sales/Technical
+    // gets dept-scoped inventory access via the roster-lead rule (see
+    // lib/inventory-permissions.ts). Managers of other departments see
+    // the sidebar entry too but land on an empty-state page.
     "dashboard.view",
     "events.view",
     "events.edit",
@@ -68,7 +70,6 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "calendar.view",
     "reports.view",
     "notifications.view",
-    "inventory.view",
   ],
   FINANCIAL_ADMIN: [
     // Rudy — Second Approver in the sign-off chain. Financial edit was
@@ -79,7 +80,6 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "calendar.view",
     "reports.view",
     "notifications.view",
-    "inventory.view",
   ],
   HR: [
     // HR owns the overtime + meal-allowance block on every KOTG booking
@@ -93,14 +93,12 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "calendar.view",
     "reports.view",
     "notifications.view",
-    "inventory.view",
   ],
   VIEWER: [
     "dashboard.view",
     "events.view",
     "calendar.view",
     "notifications.view",
-    "inventory.view",
   ],
   ROSTER_ADMIN: [
     // Baseline read access, same shape as VIEWER, plus budget.view since
@@ -116,20 +114,19 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "calendar.view",
     "reports.view",
     "notifications.view",
-    "inventory.view",
   ],
   INVENTORY_ADMIN: [
-    // Baseline read across common surfaces, plus inventory.edit — which
-    // is department-scoped by User.inventoryDept, enforced at the endpoint
-    // and UI layer (see lib/inventory-permissions.ts). Holding
-    // inventory.edit by itself doesn't authorise editing every dept.
+    // Baseline read across common surfaces. Actual inventory access is
+    // dept-scoped by User.inventoryDept — enforced at the endpoint and
+    // UI layer via lib/inventory-permissions.ts, not via a permission
+    // grant here. Holding this role alone doesn't authorise editing any
+    // dept; a Super Admin must additionally assign an inventoryDept.
     "dashboard.view",
     "events.view",
     "calendar.view",
     "reports.view",
     "notifications.view",
     "inventory.view",
-    "inventory.edit",
   ],
 };
 

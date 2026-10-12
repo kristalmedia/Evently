@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import {
   canEditInventoryDept,
+  canViewAnyInventoryDept,
   canViewInventory,
 } from "@/lib/inventory-permissions";
 import {
@@ -18,14 +19,19 @@ function isInventoryDept(v: unknown): v is InventoryDept {
   return typeof v === "string" && (VALID_DEPTS as string[]).includes(v);
 }
 
-/** GET — every catalog item, grouped by dept client-side. Any signed-in
- *  active user can read. */
+/** GET — catalog items filtered to the depts this caller is allowed to
+ *  view. Under the new rule view and modify go together, so a user who
+ *  can't edit dept X also can't see dept X's items. A caller with zero
+ *  accessible depts gets a 403 (not an empty 200) so the UI can route
+ *  them away from a page they shouldn't be on. */
 export async function GET() {
   const session = await getSession();
-  if (!canViewInventory(session?.user)) {
+  const user = session?.user;
+  if (!canViewAnyInventoryDept(user)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  return NextResponse.json({ items: listCatalogItems() });
+  const items = listCatalogItems().filter((item) => canViewInventory(user, item.dept));
+  return NextResponse.json({ items });
 }
 
 /** POST — add a custom item to the given dept. Body: { dept, name }.

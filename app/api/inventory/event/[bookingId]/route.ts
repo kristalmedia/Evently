@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import {
   canEditInventoryDept,
+  canViewAnyInventoryDept,
   canViewInventory,
 } from "@/lib/inventory-permissions";
 import {
@@ -13,20 +14,34 @@ import type { EventInventoryTick } from "@/lib/inventory-types";
 import { logAudit } from "@/lib/store";
 
 /**
- * GET — one booking's inventory ticks. Any signed-in active user can
- * read (spec: "All authenticated users can view the completed inventory
- * list within the Event Details page").
+ * GET — one booking's inventory ticks, filtered to the caller's
+ * accessible departments. Under the new rule view and modify go
+ * together, so the response only includes ticks whose catalog item
+ * belongs to a dept the caller can view. A caller with zero accessible
+ * depts gets a 403.
  */
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ bookingId: string }> },
 ) {
   const session = await getSession();
-  if (!canViewInventory(session?.user)) {
+  const user = session?.user;
+  if (!canViewAnyInventoryDept(user)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const { bookingId } = await params;
-  return NextResponse.json({ record: getEventInventory(bookingId) });
+  const record = getEventInventory(bookingId);
+  // Filter ticks down to those for items in a dept this user can view.
+  // Missing/unknown item ids are also dropped so a stale tick doesn't
+  // leak through if the catalog item was later deleted.
+  const filteredTicks: Record<string, EventInventoryTick> = {};
+  for (const [itemId, tick] of Object.entries(record.ticks)) {
+    const item = getCatalogItem(itemId);
+    if (!item) continue;
+    if (!canViewInventory(user, item.dept)) continue;
+    filteredTicks[itemId] = tick;
+  }
+  return NextResponse.json({ record: { ...record, ticks: filteredTicks } });
 }
 
 function isTick(v: unknown): v is EventInventoryTick {
