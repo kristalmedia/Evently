@@ -162,6 +162,61 @@ export interface ShadowEventRecord {
   /** Free-form notes any editor can append to the shadow record. Rarely
    *  used but a handy escape hatch — Sheet's Notes column is Sales-only. */
   notes?: string;
+  /** Sales-owned "does this booking need authority approval" block.
+   *  Absent/undefined means "not set yet" and is treated the same as
+   *  `{ required: false, bodies: [] }` on read. Editable only by
+   *  SALES_ADMIN role holders — enforced server-side in
+   *  /api/kotg/[bookingId]/authority-approval. */
+  authorityApproval?: AuthorityApproval;
   createdAt: string;
   updatedAt: string;
 }
+
+// ─── Authority Approval (Sales-owned, per-booking) ──────────────────────────
+
+/** One uploaded-document reference tied to an authority body. The app's
+ *  storage layer is in-memory with no file persistence, so this stores
+ *  METADATA ONLY — filename, size, who uploaded it, when. The actual
+ *  file bytes never reach the server; the client-side file picker reads
+ *  File.name + File.size and that's all we record. A viewer can see
+ *  "foo.pdf (2.1 MB) uploaded by Alice on Oct 16" but cannot re-download
+ *  the file through Evently — the file itself lives wherever Sales keeps
+ *  it (email, SharePoint, hand-off). This is deliberate given the
+ *  current infra; swapping in real storage is a separate piece of work. */
+export interface AuthorityDocumentRef {
+  id: string;
+  filename: string;
+  sizeBytes: number;
+  uploadedAt: string;
+  uploadedByUserId: string;
+}
+
+/** One row in the "Authority Body" repeating group. Order is preserved;
+ *  the UI numbers them "Authority body 1", "Authority body 2", ... in
+ *  array order. */
+export interface AuthorityBody {
+  id: string;
+  name: string;
+  documents: AuthorityDocumentRef[];
+}
+
+/** The Sales-owned authority-approval block on one booking. */
+export interface AuthorityApproval {
+  /** The toggle value — "Require me authoritative approval?" No / Yes.
+   *  When false the bodies list is ignored entirely (and the UI hides
+   *  the dynamic fields); kept rather than discarded so a Sales user
+   *  can flip No→Yes→No without losing their work in a single session. */
+  required: boolean;
+  bodies: AuthorityBody[];
+  updatedAt?: string;
+  updatedByUserId?: string;
+}
+
+/** The "nothing set yet" default returned by callers that want a shape
+ *  rather than a maybe-undefined. The shadow store only writes the field
+ *  on first save, so this empty value shows for every booking that
+ *  hasn't been touched. */
+export const EMPTY_AUTHORITY_APPROVAL: AuthorityApproval = {
+  required: false,
+  bodies: [],
+};

@@ -43,10 +43,12 @@ import {
   MANAGER_DEPT_KEYS,
 } from "@/lib/shadow-events";
 import type { ShadowEventEventlyStatus } from "@/lib/shadow-events-types";
+import { EMPTY_AUTHORITY_APPROVAL } from "@/lib/shadow-events-types";
 import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
 import { DeptRosterEditor } from "@/components/kotg/dept-roster-editor";
 import { HrEditor, type FlatRosterRow } from "@/components/kotg/hr-editor";
 import { ConfirmedRosterEditor } from "@/components/kotg/confirmed-roster-editor";
+import { AuthorityApprovalEditor } from "@/components/kotg/authority-approval-editor";
 import { EventInventoryView } from "@/components/inventory/event-inventory-view";
 import { listCatalogItems, getEventInventory } from "@/lib/inventory-store";
 import {
@@ -462,6 +464,16 @@ export default async function EventDetailPage({
           venue={kotg.booking.LocationDetails || undefined}
           items={inventoryItems}
           initialTicks={inventoryRecord.ticks}
+        />
+      )}
+
+      {/* Authority Approval — Sales-only. Gated here so the section
+          doesn't render at all for non-Sales viewers (the API also
+          enforces the same gate). Everyone else never sees this card. */}
+      {hasRole(user, "SALES_ADMIN") && (
+        <AuthorityApprovalEditor
+          bookingId={bookingId}
+          initial={shadow.authorityApproval ?? EMPTY_AUTHORITY_APPROVAL}
         />
       )}
     </div>

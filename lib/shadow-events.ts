@@ -1,4 +1,5 @@
 import type {
+  AuthorityApproval,
   DeptRoster,
   ShadowDeptKey,
   ShadowEventEventlyStatus,
@@ -188,6 +189,24 @@ export function markFinanceComplete(
   return updateShadowEvent(bookingId, {
     finance: next.finance,
     eventlyStatus: computeEventlyStatus(next),
+  });
+}
+
+/** Wholesale-replace the authority-approval block on this booking's
+ *  shadow record, stamping updatedAt/updatedByUserId. The caller
+ *  (/api/kotg/[bookingId]/authority-approval) owns the auth check — this
+ *  helper trusts the input shape. */
+export function setAuthorityApproval(
+  bookingId: string,
+  approval: AuthorityApproval,
+  userId: string,
+): ShadowEventRecord {
+  return updateShadowEvent(bookingId, {
+    authorityApproval: {
+      ...approval,
+      updatedAt: new Date().toISOString(),
+      updatedByUserId: userId,
+    },
   });
 }
 
