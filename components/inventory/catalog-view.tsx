@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Boxes, Lock, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -8,7 +8,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { apiPath } from "@/lib/api-path";
 import type { CatalogItem, InventoryDept } from "@/lib/inventory-types";
 import {
@@ -165,28 +164,13 @@ export function InventoryCatalogView({ items }: { items: CatalogItem[] }) {
               ) : (
                 <ul className="divide-y rounded-md border">
                   {list.map((item) => (
-                    <li
+                    <CatalogRow
                       key={item.id}
-                      className="flex items-center gap-3 px-3 py-2 text-sm"
-                    >
-                      <span className="flex-1 min-w-0 truncate">{item.name}</span>
-                      {item.isSeed ? (
-                        <Badge variant="outline" className="text-[0.6rem]">seed</Badge>
-                      ) : (
-                        <Badge variant="signal" className="text-[0.6rem]">custom</Badge>
-                      )}
-                      {canEdit && !item.isSeed && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => deleteItem(item)}
-                          disabled={busy}
-                          aria-label={`Remove ${item.name}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-rose-500" />
-                        </Button>
-                      )}
-                    </li>
+                      item={item}
+                      canEdit={canEdit}
+                      onDelete={deleteItem}
+                      busy={busy}
+                    />
                   ))}
                 </ul>
               )}
@@ -224,5 +208,123 @@ export function InventoryCatalogView({ items }: { items: CatalogItem[] }) {
         );
       })}
     </div>
+  );
+}
+
+/**
+ * One row in the catalog list. Lifted out of InventoryCatalogView so
+ * each row can carry its own local state for the quantity input (local
+ * state is what lets a user type "123" without the number briefly
+ * showing "1", "12", "123" as the parent state round-trips).
+ *
+ * The quantity input autosaves on blur AND when the value is unchanged
+ * for 800ms — the former catches a user tabbing away or clicking off
+ * the field, the latter catches "typed and then forgot about it". Both
+ * paths PATCH /api/inventory/catalog/[itemId] with just { quantity }.
+ */
+function CatalogRow({
+  item,
+  canEdit,
+  onDelete,
+  busy,
+}: {
+  item: CatalogItem;
+  canEdit: boolean;
+  onDelete: (item: CatalogItem) => void;
+  busy: boolean;
+}) {
+  const router = useRouter();
+  // Local draft so the input doesn't flicker on parent re-renders mid-typing.
+  // Seeded from the server value, and re-synced to it whenever the server
+  // value changes (e.g. after a successful save → router.refresh() → new
+  // props). An empty string is a valid intermediate state while the user
+  // clears the field; we only persist a number.
+  const [draft, setDraft] = useState<string>(String(item.quantity));
+  const [saving, setSaving] = useState(false);
+  const lastSavedRef = useRef<number>(item.quantity);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setDraft(String(item.quantity));
+    lastSavedRef.current = item.quantity;
+  }, [item.quantity]);
+
+  async function persist(nextRaw: string) {
+    if (!canEdit) return;
+    const parsed = Number(nextRaw);
+    const next = Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+    if (next === lastSavedRef.current) return;
+    setSaving(true);
+    try {
+      const res = await fetch(apiPath(`/api/inventory/catalog/${item.id}`), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quantity: next }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to update quantity");
+      }
+      lastSavedRef.current = next;
+      router.refresh();
+    } catch (e) {
+      toast.error((e as Error).message);
+      // Revert the local draft to the last-known-good value so the UI
+      // doesn't keep showing an unsaved number as if it stuck.
+      setDraft(String(lastSavedRef.current));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function scheduleDebouncedSave(nextRaw: string) {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      persist(nextRaw);
+    }, 800);
+  }
+
+  return (
+    <li className="flex items-center gap-3 px-3 py-2 text-sm">
+      <span className="flex-1 min-w-0 truncate">{item.name}</span>
+      <div className="flex items-center gap-1.5">
+        <label
+          htmlFor={`qty-${item.id}`}
+          className="text-[0.65rem] font-mono uppercase tracking-widest text-muted-foreground"
+        >
+          Qty
+        </label>
+        <Input
+          id={`qty-${item.id}`}
+          type="number"
+          min={0}
+          step={1}
+          inputMode="numeric"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            scheduleDebouncedSave(e.target.value);
+          }}
+          onBlur={() => {
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+            persist(draft);
+          }}
+          disabled={!canEdit || saving || busy}
+          className="h-8 w-20 text-right"
+          aria-label={`Quantity for ${item.name}`}
+        />
+      </div>
+      {canEdit && !item.isSeed && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onDelete(item)}
+          disabled={busy || saving}
+          aria-label={`Remove ${item.name}`}
+        >
+          <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+        </Button>
+      )}
+    </li>
   );
 }

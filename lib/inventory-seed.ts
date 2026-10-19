@@ -110,6 +110,11 @@ export function buildSeedCatalog(): CatalogItem[] {
         dept,
         name,
         isSeed: true,
+        // Catalog quantity starts at 0 for every seed row — the
+        // department fills these in through the /inventory page as a
+        // first-time setup pass. The data wasn't in the source
+        // spreadsheet to seed from, so 0 is the safe starting point.
+        quantity: 0,
         createdAt: now,
         updatedAt: now,
       });

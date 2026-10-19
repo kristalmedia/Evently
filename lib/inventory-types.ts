@@ -54,12 +54,20 @@ export const INVENTORY_DEPT_ORDER: readonly InventoryDept[] = [
 /** One row in the global catalog. `isSeed` marks the pre-populated
  *  defaults so they can't be accidentally deleted; custom items added
  *  through "Add More Inventory Asset" have isSeed=false and are
- *  deletable by any admin who can edit that dept. */
+ *  deletable by any admin who can edit that dept.
+ *
+ *  `quantity` is the current stock count held at the catalog level (how
+ *  many of this item the department has on hand overall). Editable by
+ *  whoever has canEditInventoryDept for the item's dept — see the PATCH
+ *  handler in /api/inventory/catalog/[itemId]. This is a global catalog
+ *  figure, separate from the per-event `EventInventoryTick.quantity`
+ *  which tracks "how many are needed for this specific booking". */
 export interface CatalogItem {
   id: string;
   dept: InventoryDept;
   name: string;
   isSeed: boolean;
+  quantity: number;
   createdAt: string;
   updatedAt: string;
 }

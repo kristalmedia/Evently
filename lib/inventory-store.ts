@@ -53,6 +53,7 @@ export function getCatalogItem(id: string): CatalogItem | null {
 export function addCatalogItem(input: {
   dept: InventoryDept;
   name: string;
+  quantity?: number;
 }): CatalogItem {
   const now = new Date().toISOString();
   const item: CatalogItem = {
@@ -60,6 +61,7 @@ export function addCatalogItem(input: {
     dept: input.dept,
     name: input.name.trim(),
     isSeed: false,
+    quantity: Math.max(0, Math.floor(input.quantity ?? 0)),
     createdAt: now,
     updatedAt: now,
   };
@@ -74,6 +76,29 @@ export function deleteCatalogItem(id: string): boolean {
   const existing = s.catalog.get(id);
   if (!existing || existing.isSeed) return false;
   return s.catalog.delete(id);
+}
+
+/** Update the catalog-level quantity (stock count) on one item.
+ *  Returns the updated record, or null if the item id doesn't exist.
+ *  Negative inputs and non-finite numbers are coerced to 0; fractional
+ *  inputs are floored. The caller enforces the dept-scoped permission
+ *  check — this helper trusts the input. */
+export function setCatalogItemQuantity(
+  id: string,
+  quantity: number,
+): CatalogItem | null {
+  const s = state();
+  const existing = s.catalog.get(id);
+  if (!existing) return null;
+  const normalized = Number.isFinite(quantity) ? Math.max(0, Math.floor(quantity)) : 0;
+  if (existing.quantity === normalized) return existing;
+  const next: CatalogItem = {
+    ...existing,
+    quantity: normalized,
+    updatedAt: new Date().toISOString(),
+  };
+  s.catalog.set(id, next);
+  return next;
 }
 
 // ─── Per-event ticks ──────────────────────────────────────────────────────
