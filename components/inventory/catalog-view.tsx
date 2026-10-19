@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Boxes, Lock, Plus, Trash2 } from "lucide-react";
+import { Boxes, Download, FileDown, Lock, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,10 @@ import {
   INVENTORY_DEPT_LABEL,
   INVENTORY_DEPT_ORDER,
 } from "@/lib/inventory-types";
+import {
+  exportDeptCatalogCsv,
+  exportDeptCatalogPdf,
+} from "@/lib/inventory-export";
 import { useSessionStore } from "@/stores/session-store";
 import { hasRole, isSuperAdmin, rosterDeptKeyForDepartment } from "@/lib/permissions";
 
@@ -137,10 +141,16 @@ export function InventoryCatalogView({ items }: { items: CatalogItem[] }) {
       {INVENTORY_DEPT_ORDER.map((dept) => {
         const list = grouped.get(dept) ?? [];
         const canEdit = canEditDeptClient(currentUser, dept);
+        // Per-user-request: per-dept CSV / PDF export is gated STRICTLY
+        // to the INVENTORY_ADMIN role. Super Admin does NOT bypass and
+        // Managers who can otherwise view/edit the catalog do NOT get
+        // the buttons. If you want to loosen this to "anyone who can
+        // edit this dept", change the condition to `canEdit`.
+        const canExport = hasRole(currentUser, "INVENTORY_ADMIN");
         return (
           <Card key={dept}>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
+              <CardTitle className="text-base flex items-center gap-2 flex-wrap">
                 <Boxes className="h-4 w-4 text-accent" />
                 <span>{INVENTORY_DEPT_LABEL[dept]}</span>
                 <span className="ml-auto flex items-center gap-2">
@@ -152,6 +162,38 @@ export function InventoryCatalogView({ items }: { items: CatalogItem[] }) {
                       <Lock className="h-3 w-3" />
                       Read-only
                     </span>
+                  )}
+                  {canExport && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 h-7 px-2 text-xs"
+                        onClick={() => exportDeptCatalogCsv(dept, list)}
+                        disabled={list.length === 0}
+                        aria-label={`Save ${INVENTORY_DEPT_LABEL[dept]} inventory as CSV`}
+                      >
+                        <FileDown className="h-3 w-3" />
+                        Save CSV
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 h-7 px-2 text-xs"
+                        onClick={async () => {
+                          try {
+                            await exportDeptCatalogPdf(dept, list);
+                          } catch (e) {
+                            toast.error(`PDF export failed: ${(e as Error).message}`);
+                          }
+                        }}
+                        disabled={list.length === 0}
+                        aria-label={`Save ${INVENTORY_DEPT_LABEL[dept]} inventory as PDF`}
+                      >
+                        <Download className="h-3 w-3" />
+                        Save PDF
+                      </Button>
+                    </>
                   )}
                 </span>
               </CardTitle>

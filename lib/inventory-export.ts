@@ -151,3 +151,71 @@ export async function exportInventoryPdf(bundle: InventoryExportBundle): Promise
   const filename = `inventory-${safeFilename(bundle.displayTitle)}-${todayStamp()}.pdf`;
   doc.save(filename);
 }
+
+// ─── Per-department catalog export ────────────────────────────────────────
+// Used by the /inventory catalog page's per-dept "Save CSV / Save PDF"
+// buttons. Scope is just the master item list for one dept (name +
+// quantity) — NOT per-event ticks. Separate from the per-event bundle
+// above so the two exports don't drift as either side's columns evolve.
+
+/** CSV export of one department's catalog. Columns: Item name, Quantity,
+ *  Type (Seed / Custom), Last updated. Filename includes the dept slug
+ *  so files from different depts don't collide in a Downloads folder. */
+export function exportDeptCatalogCsv(dept: InventoryDept, items: CatalogItem[]): void {
+  const header = ["Item", "Quantity", "Type", "Last updated"];
+  const lines: string[] = [header.join(",")];
+  for (const item of items) {
+    lines.push(
+      [
+        item.name,
+        String(item.quantity),
+        item.isSeed ? "Seed" : "Custom",
+        item.updatedAt,
+      ]
+        .map(csvField)
+        .join(","),
+    );
+  }
+  const csv = "﻿" + lines.join("\r\n") + "\r\n";
+  const filename = `evently-inventory-${safeFilename(INVENTORY_DEPT_LABEL[dept])}-${todayStamp()}.csv`;
+  download(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename);
+}
+
+/** PDF export of one department's catalog. Mirrors the CSV columns; one
+ *  table only (per-dept, so no section headers inside). Dynamically
+ *  imports jsPDF to stay out of the shared bundle. */
+export async function exportDeptCatalogPdf(
+  dept: InventoryDept,
+  items: CatalogItem[],
+): Promise<void> {
+  const { default: jsPDF } = await import("jspdf");
+  const autoTableMod = await import("jspdf-autotable");
+  const autoTable = autoTableMod.default as unknown as (
+    doc: unknown,
+    options: Record<string, unknown>,
+  ) => void;
+
+  const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+  doc.setFontSize(16);
+  doc.text(`${INVENTORY_DEPT_LABEL[dept]} inventory catalog`, 40, 40);
+  doc.setFontSize(10);
+  doc.text(`Generated ${new Date().toLocaleString("en-GB")}`, 40, 60);
+  doc.text(`${items.length} item${items.length === 1 ? "" : "s"}`, 40, 76);
+
+  autoTable(doc, {
+    startY: 96,
+    head: [["Item", "Quantity", "Type", "Last updated"]],
+    body: items.map((item) => [
+      item.name,
+      String(item.quantity),
+      item.isSeed ? "Seed" : "Custom",
+      new Date(item.updatedAt).toLocaleDateString("en-GB"),
+    ]),
+    styles: { fontSize: 9, cellPadding: 3 },
+    headStyles: { fillColor: [50, 60, 80], textColor: 255 },
+    margin: { left: 40, right: 40 },
+  });
+
+  const filename = `evently-inventory-${safeFilename(INVENTORY_DEPT_LABEL[dept])}-${todayStamp()}.pdf`;
+  doc.save(filename);
+}
