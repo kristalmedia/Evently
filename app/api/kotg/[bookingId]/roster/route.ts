@@ -57,12 +57,22 @@ export async function PUT(
   // undefined so the client can save intermediate progress without
   // flipping the flag ("Save Draft" vs "Mark complete" in the UI).
   const existing = shadow.rosterByDept[deptKey];
-  const isCompleted = body.roster?.completed === true;
+  const slots = Array.isArray(body.roster?.slots) ? body.roster!.slots : [];
+  const staff = Array.isArray(body.roster?.staff) ? body.roster!.staff : [];
+  // Enforce the invariant "a dept with no slots can't be complete". This
+  // guards the case where a Manager marks the roster complete with
+  // slots in place, then later deletes all slots via Save Changes — the
+  // client may still send `completed: true` because the UI preserves it,
+  // but a roster with nothing in it must not count toward the workflow
+  // (computeEventlyStatus reads the completed flag to decide whether
+  // Managers are done, so an "empty but completed" dept would wrongly
+  // unlock HR). Downgrade back to DRAFT and drop the completion stamps.
+  const isCompleted = body.roster?.completed === true && slots.length > 0;
   const nextBlock: DeptRoster = {
     status: isCompleted ? "PUBLISHED" : "DRAFT",
     completed: isCompleted,
-    slots: Array.isArray(body.roster?.slots) ? body.roster!.slots : [],
-    staff: Array.isArray(body.roster?.staff) ? body.roster!.staff : [],
+    slots,
+    staff,
   };
   if (isCompleted) {
     // Managers are allowed to keep editing a completed/published roster
@@ -74,6 +84,8 @@ export async function PUT(
   }
 
   const updated = setDeptRoster(bookingId, deptKey, nextBlock);
+  const emptiedWhilePublished =
+    existing?.completed === true && !isCompleted && slots.length === 0;
   logAudit({
     kind: "STATUS_CHANGED",
     actor: user,
@@ -83,7 +95,9 @@ export async function PUT(
         ? existing?.completed
           ? "updated (already published)"
           : "completed"
-        : "saved as draft"
+        : emptiedWhilePublished
+          ? "reverted to draft (all shifts removed)"
+          : "saved as draft"
     } (eventlyStatus → ${updated.eventlyStatus})`,
   });
   return NextResponse.json({ shadow: updated });

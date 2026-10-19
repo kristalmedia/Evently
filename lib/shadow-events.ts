@@ -221,13 +221,21 @@ export function setAuthorityApproval(
  *  `record.finance.completed` is retained on the type for schema
  *  compatibility but no longer affects the derived status. */
 export function computeEventlyStatus(record: ShadowEventRecord): ShadowEventEventlyStatus {
-  const managersDone = MANAGER_DEPT_KEYS.every(
-    (k) => record.rosterByDept[k]?.completed === true,
-  );
+  // A dept counts as "done" only when `completed === true` AND it
+  // actually has at least one slot. The API write path already enforces
+  // this invariant (see app/api/kotg/[bookingId]/roster/route.ts — a
+  // save with 0 slots forces completed back to false), but adding the
+  // belt-and-braces check here protects against any legacy records
+  // written before that enforcement landed, where `completed: true` may
+  // have persisted alongside an emptied slots array.
+  const managersDone = MANAGER_DEPT_KEYS.every((k) => {
+    const r = record.rosterByDept[k];
+    return r?.completed === true && r.slots.length > 0;
+  });
   const managersStarted = MANAGER_DEPT_KEYS.some((k) => {
     const r = record.rosterByDept[k];
     if (!r) return false;
-    return r.completed || r.slots.length > 0 || r.staff.length > 0;
+    return r.slots.length > 0 || r.staff.length > 0;
   });
 
   if (record.hr.completed) return "PUBLISHED";

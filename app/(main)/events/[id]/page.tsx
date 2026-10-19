@@ -492,9 +492,16 @@ function DeptCompletionGrid({
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
       {MANAGER_DEPT_KEYS.map((k) => {
         const dept = shadow.rosterByDept[k];
-        const completed = dept?.completed === true;
+        // "Done" requires BOTH completed=true AND actual slots in the
+        // roster — same invariant computeEventlyStatus enforces. A
+        // stale/legacy record where a Manager marked complete and then
+        // deleted every slot shouldn't show a ✓ for that dept just
+        // because the flag persisted; the server now downgrades those on
+        // next save but existing data still needs this guard here too.
+        const hasShifts = !!dept && dept.slots.length > 0;
+        const completed = dept?.completed === true && hasShifts;
         const started =
-          !!dept && (completed || dept.slots.length > 0 || dept.staff.length > 0);
+          !!dept && (hasShifts || dept.staff.length > 0);
         return (
           <CompletionChip
             key={k}
