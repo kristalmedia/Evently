@@ -25,7 +25,6 @@ import {
   INVENTORY_DEPT_ORDER,
 } from "@/lib/inventory-types";
 import {
-  countExportableItems,
   exportDeptCatalogCsv,
   exportDeptCatalogPdf,
 } from "@/lib/inventory-export";
@@ -282,10 +281,6 @@ export function InventoryCatalogView({ items }: { items: CatalogItem[] }) {
         const list = grouped.get(dept) ?? [];
         const canEdit = canEditDeptClient(currentUser, dept);
         const canExport = hasRole(currentUser, "INVENTORY_ADMIN");
-        // Seed items are excluded from exports — see lib/inventory-export.ts.
-        // Use this count to disable the buttons so a dept with only seed
-        // items doesn't offer an export that would come back empty.
-        const exportableCount = countExportableItems(list);
         const dirtyCount = list.filter((item) => {
           const d = drafts[item.id];
           return d && draftDiffersFromItem(d, item);
@@ -314,13 +309,8 @@ export function InventoryCatalogView({ items }: { items: CatalogItem[] }) {
                         size="sm"
                         className="gap-1.5 h-7 px-2 text-xs"
                         onClick={() => exportDeptCatalogCsv(dept, list)}
-                        disabled={exportableCount === 0}
+                        disabled={list.length === 0}
                         aria-label={`Save ${INVENTORY_DEPT_LABEL[dept]} inventory as CSV`}
-                        title={
-                          exportableCount === 0
-                            ? "Nothing to export — seed items are excluded"
-                            : undefined
-                        }
                       >
                         <FileDown className="h-3 w-3" />
                         Save CSV
@@ -336,13 +326,8 @@ export function InventoryCatalogView({ items }: { items: CatalogItem[] }) {
                             toast.error(`PDF export failed: ${(e as Error).message}`);
                           }
                         }}
-                        disabled={exportableCount === 0}
+                        disabled={list.length === 0}
                         aria-label={`Save ${INVENTORY_DEPT_LABEL[dept]} inventory as PDF`}
-                        title={
-                          exportableCount === 0
-                            ? "Nothing to export — seed items are excluded"
-                            : undefined
-                        }
                       >
                         <Download className="h-3 w-3" />
                         Save PDF

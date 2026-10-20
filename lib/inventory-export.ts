@@ -158,26 +158,21 @@ export async function exportInventoryPdf(bundle: InventoryExportBundle): Promise
 // quantity) — NOT per-event ticks. Separate from the per-event bundle
 // above so the two exports don't drift as either side's columns evolve.
 
-/** Filter helper: seed items are excluded from exports per spec — only
- *  user-added (custom) items make it into CSV/PDF output. Both exporters
- *  below route the incoming list through this before rendering, so the
- *  rule lives in one place. */
-function exportableItems(items: CatalogItem[]): CatalogItem[] {
-  return items.filter((item) => !item.isSeed);
-}
-
-/** CSV export of one department's catalog. Columns: Item name, Quantity,
- *  Last updated. Seed items are excluded by design (see exportableItems);
- *  the "Type" column is also gone because every surviving row is Custom
- *  — printing it added no information. Filename includes the dept slug
- *  so files from different depts don't collide in a Downloads folder. */
+/** CSV export of one department's catalog. Includes every item (seed +
+ *  custom) — the earlier seed-only exclusion was reverted after it left
+ *  most depts with nothing to export, since the catalog is mostly seed
+ *  data. Columns: Item, Quantity, Type (Seed / Custom), Last updated. */
 export function exportDeptCatalogCsv(dept: InventoryDept, items: CatalogItem[]): void {
-  const rows = exportableItems(items);
-  const header = ["Item", "Quantity", "Last updated"];
+  const header = ["Item", "Quantity", "Type", "Last updated"];
   const lines: string[] = [header.join(",")];
-  for (const item of rows) {
+  for (const item of items) {
     lines.push(
-      [item.name, String(item.quantity), item.updatedAt]
+      [
+        item.name,
+        String(item.quantity),
+        item.isSeed ? "Seed" : "Custom",
+        item.updatedAt,
+      ]
         .map(csvField)
         .join(","),
     );
@@ -187,10 +182,8 @@ export function exportDeptCatalogCsv(dept: InventoryDept, items: CatalogItem[]):
   download(new Blob([csv], { type: "text/csv;charset=utf-8" }), filename);
 }
 
-/** PDF export of one department's catalog. Same column shape as the CSV
- *  (name / quantity / last updated); seed items are excluded via
- *  exportableItems. Dynamically imports jsPDF to stay out of the shared
- *  bundle. */
+/** PDF export of one department's catalog. Mirrors the CSV columns.
+ *  Dynamically imports jsPDF to stay out of the shared bundle. */
 export async function exportDeptCatalogPdf(
   dept: InventoryDept,
   items: CatalogItem[],
@@ -202,22 +195,20 @@ export async function exportDeptCatalogPdf(
     options: Record<string, unknown>,
   ) => void;
 
-  const rows = exportableItems(items);
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
   doc.setFontSize(16);
   doc.text(`${INVENTORY_DEPT_LABEL[dept]} inventory catalog`, 40, 40);
   doc.setFontSize(10);
   doc.text(`Generated ${new Date().toLocaleString("en-GB")}`, 40, 60);
-  // Item count reflects what's actually in the table — the seed items
-  // excluded here can be misleading if we printed the full catalog size.
-  doc.text(`${rows.length} item${rows.length === 1 ? "" : "s"}`, 40, 76);
+  doc.text(`${items.length} item${items.length === 1 ? "" : "s"}`, 40, 76);
 
   autoTable(doc, {
     startY: 96,
-    head: [["Item", "Quantity", "Last updated"]],
-    body: rows.map((item) => [
+    head: [["Item", "Quantity", "Type", "Last updated"]],
+    body: items.map((item) => [
       item.name,
       String(item.quantity),
+      item.isSeed ? "Seed" : "Custom",
       new Date(item.updatedAt).toLocaleDateString("en-GB"),
     ]),
     styles: { fontSize: 9, cellPadding: 3 },
@@ -227,12 +218,4 @@ export async function exportDeptCatalogPdf(
 
   const filename = `evently-inventory-${safeFilename(INVENTORY_DEPT_LABEL[dept])}-${todayStamp()}.pdf`;
   doc.save(filename);
-}
-
-/** How many of this dept's items are actually exportable (non-seed)?
- *  Used by the catalog view to disable the export buttons when there's
- *  nothing to export, now that "non-empty list" and "has exportable
- *  items" aren't the same thing. */
-export function countExportableItems(items: CatalogItem[]): number {
-  return exportableItems(items).length;
 }
