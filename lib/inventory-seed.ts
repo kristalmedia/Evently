@@ -56,8 +56,12 @@ const SEED: Record<InventoryDept, string[]> = {
     "DJ Calendar",
     "Toolbox",
     "GWM Bag",
-    "RCA to XLR/Stereo jack",
-    "Seamless display panels",
+    // "RCA to XLR/Stereo jack" removed (user request).
+    // Note: items below shift up one index, so their seedItemId values
+    // change. In-memory ticks keyed by the old ids become orphaned on
+    // next read; harmless because the store rebuilds from seed on PM2
+    // restart anyway (per-event tick state is already process-lifetime).
+    "KRISTAL Panel", // was: "Seamless display panels"
     "AIO Desktop",
     "TV",
     "Baby Kruiser",

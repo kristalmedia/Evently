@@ -66,6 +66,11 @@ export interface CatalogItem {
   id: string;
   dept: InventoryDept;
   name: string;
+  /** Optional free-text description shown under the name in the catalog
+   *  row. Not surfaced on the per-event checklist view (that one shows
+   *  the name only). Introduced alongside the Save-Changes editor; seed
+   *  rows have it blank until a dept member fills one in. */
+  description?: string;
   isSeed: boolean;
   quantity: number;
   createdAt: string;

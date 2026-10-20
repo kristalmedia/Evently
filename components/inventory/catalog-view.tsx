@@ -1,8 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Boxes, Download, FileDown, Lock, Plus, Trash2 } from "lucide-react";
+import {
+  Boxes,
+  Download,
+  FileDown,
+  Lock,
+  Pencil,
+  Plus,
+  Save,
+  Trash2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -29,12 +39,10 @@ const ROSTER_DEPT_TO_INVENTORY_DEPT: Partial<Record<string, InventoryDept>> = {
   TECH: "TECH_OPS",
 };
 
-/** Client-side mirror of canEditInventoryDept — we can't call the
- *  server helper directly from a client component, but the rule is
- *  simple enough to re-encode here for gating UI affordances. The
- *  server enforces it independently (see the /api/inventory routes).
- *  Three-way union: Super Admin bypass, roster-lead-for-this-dept,
- *  or explicit INVENTORY_ADMIN assignment via User.inventoryDept. */
+/** Client-side mirror of canEditInventoryDept — see
+ *  lib/inventory-permissions.ts for the authoritative server-side rule.
+ *  Three-way union: Super Admin bypass, roster-lead-for-this-dept, or
+ *  explicit INVENTORY_ADMIN assignment via User.inventoryDept. */
 function canEditDeptClient(
   user: ReturnType<typeof useSessionStore.getState>["user"],
   dept: InventoryDept,
@@ -49,6 +57,41 @@ function canEditDeptClient(
 
   if (hasRole(user, "INVENTORY_ADMIN") && user.inventoryDept === dept) return true;
 
+  return false;
+}
+
+/** Local draft of one row's editable fields. Separate from CatalogItem so
+ *  the per-row toggleable edit state and the dept-level batch save can
+ *  coexist cleanly — a row in "view mode" still carries a draft (which
+ *  simply mirrors the server values); dept-level Save Changes diffs the
+ *  draft against item.* and only PATCHes rows that drift. */
+interface RowDraft {
+  name: string;
+  description: string;
+  quantity: string; // string so an empty input is a valid intermediate
+  editing: boolean;
+}
+
+function freshDraft(item: CatalogItem): RowDraft {
+  return {
+    name: item.name,
+    description: item.description ?? "",
+    quantity: String(item.quantity),
+    editing: false,
+  };
+}
+
+function normalizeQuantity(raw: string): number {
+  const n = Number(raw);
+  return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+}
+
+/** Does this draft diverge from the server values on any editable field?
+ *  Used by the dept-level Save Changes to decide which rows to PATCH. */
+function draftDiffersFromItem(draft: RowDraft, item: CatalogItem): boolean {
+  if (draft.name.trim() !== item.name) return true;
+  if ((draft.description.trim() || undefined) !== item.description) return true;
+  if (normalizeQuantity(draft.quantity) !== item.quantity) return true;
   return false;
 }
 
@@ -81,6 +124,43 @@ export function InventoryCatalogView({ items }: { items: CatalogItem[] }) {
     return g;
   }, [items]);
 
+  // Draft state keyed by item.id. Re-seeds from props whenever the server
+  // items change (e.g. after router.refresh), but preserves the `editing`
+  // flag so a toggled-open row stays open through a routine refresh.
+  const [drafts, setDrafts] = useState<Record<string, RowDraft>>(() => {
+    const seed: Record<string, RowDraft> = {};
+    for (const item of items) seed[item.id] = freshDraft(item);
+    return seed;
+  });
+  useEffect(() => {
+    setDrafts((prev) => {
+      const next: Record<string, RowDraft> = {};
+      for (const item of items) {
+        const old = prev[item.id];
+        next[item.id] = old
+          ? {
+              name: item.name,
+              description: item.description ?? "",
+              quantity: String(item.quantity),
+              editing: old.editing,
+            }
+          : freshDraft(item);
+      }
+      return next;
+    });
+  }, [items]);
+
+  const updateDraft = useCallback(
+    (itemId: string, patch: Partial<RowDraft>) => {
+      setDrafts((prev) => {
+        const current = prev[itemId];
+        if (!current) return prev;
+        return { ...prev, [itemId]: { ...current, ...patch } };
+      });
+    },
+    [],
+  );
+
   async function addItem(dept: InventoryDept) {
     const name = (newItemNames[dept] ?? "").trim();
     if (name.length < 1) {
@@ -111,10 +191,6 @@ export function InventoryCatalogView({ items }: { items: CatalogItem[] }) {
   }
 
   async function deleteItem(item: CatalogItem) {
-    if (item.isSeed) {
-      toast.error("Seed items can't be deleted");
-      return;
-    }
     if (!confirm(`Remove "${item.name}" from the ${INVENTORY_DEPT_LABEL[item.dept]} catalog?`)) {
       return;
     }
@@ -136,17 +212,80 @@ export function InventoryCatalogView({ items }: { items: CatalogItem[] }) {
     }
   }
 
+  /** Dept-level Save Changes: diff each row's draft against the server
+   *  item, PATCH only the ones that drift. Rows pass validation first
+   *  (no blank names); if any row fails, nothing is sent. Successful
+   *  rows exit edit mode. */
+  async function saveDeptChanges(dept: InventoryDept, list: CatalogItem[]) {
+    const dirty = list
+      .map((item) => ({ item, draft: drafts[item.id] }))
+      .filter(
+        (r): r is { item: CatalogItem; draft: RowDraft } =>
+          !!r.draft && draftDiffersFromItem(r.draft, r.item),
+      );
+
+    if (dirty.length === 0) {
+      toast.info("No changes to save", { position: "bottom-center" });
+      return;
+    }
+    for (const { item, draft } of dirty) {
+      if (!draft.name.trim()) {
+        toast.error(`"${item.name}" needs a name`);
+        return;
+      }
+    }
+
+    setBusy(true);
+    try {
+      const results = await Promise.all(
+        dirty.map(async ({ item, draft }) => {
+          const res = await fetch(apiPath(`/api/inventory/catalog/${item.id}`), {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: draft.name.trim(),
+              description: draft.description.trim(),
+              quantity: normalizeQuantity(draft.quantity),
+            }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error ?? `Failed to save "${item.name}"`);
+          }
+          return item.id;
+        }),
+      );
+      // Exit edit mode on everything we saved.
+      setDrafts((prev) => {
+        const next = { ...prev };
+        for (const id of results) {
+          if (next[id]) next[id] = { ...next[id], editing: false };
+        }
+        return next;
+      });
+      toast.success(
+        `Saved ${results.length} change${results.length === 1 ? "" : "s"} in ${INVENTORY_DEPT_LABEL[dept]}`,
+        { position: "bottom-center" },
+      );
+      router.refresh();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       {INVENTORY_DEPT_ORDER.map((dept) => {
         const list = grouped.get(dept) ?? [];
         const canEdit = canEditDeptClient(currentUser, dept);
-        // Per-user-request: per-dept CSV / PDF export is gated STRICTLY
-        // to the INVENTORY_ADMIN role. Super Admin does NOT bypass and
-        // Managers who can otherwise view/edit the catalog do NOT get
-        // the buttons. If you want to loosen this to "anyone who can
-        // edit this dept", change the condition to `canEdit`.
         const canExport = hasRole(currentUser, "INVENTORY_ADMIN");
+        const dirtyCount = list.filter((item) => {
+          const d = drafts[item.id];
+          return d && draftDiffersFromItem(d, item);
+        }).length;
+
         return (
           <Card key={dept}>
             <CardHeader className="pb-3">
@@ -198,7 +337,7 @@ export function InventoryCatalogView({ items }: { items: CatalogItem[] }) {
                 </span>
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-3">
               {list.length === 0 ? (
                 <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
                   No items yet.
@@ -209,41 +348,64 @@ export function InventoryCatalogView({ items }: { items: CatalogItem[] }) {
                     <CatalogRow
                       key={item.id}
                       item={item}
+                      draft={drafts[item.id] ?? freshDraft(item)}
                       canEdit={canEdit}
-                      onDelete={deleteItem}
                       busy={busy}
+                      onDraftChange={(patch) => updateDraft(item.id, patch)}
+                      onDelete={() => deleteItem(item)}
                     />
                   ))}
                 </ul>
               )}
               {canEdit && (
-                <div className="flex gap-2 pt-1">
-                  <Input
-                    placeholder="Add more inventory asset…"
-                    value={newItemNames[dept]}
-                    onChange={(e) =>
-                      setNewItemNames((prev) => ({ ...prev, [dept]: e.target.value }))
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addItem(dept);
+                <>
+                  <div className="flex gap-2 pt-1">
+                    <Input
+                      placeholder="Add more inventory asset…"
+                      value={newItemNames[dept]}
+                      onChange={(e) =>
+                        setNewItemNames((prev) => ({ ...prev, [dept]: e.target.value }))
                       }
-                    }}
-                    disabled={busy}
-                    className="flex-1"
-                  />
-                  <Button
-                    variant="accent"
-                    size="sm"
-                    onClick={() => addItem(dept)}
-                    disabled={busy || !newItemNames[dept].trim()}
-                    className="gap-1.5"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Add
-                  </Button>
-                </div>
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addItem(dept);
+                        }
+                      }}
+                      disabled={busy}
+                      className="flex-1"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => addItem(dept)}
+                      disabled={busy || !newItemNames[dept].trim()}
+                      className="gap-1.5"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2 pt-2 border-t">
+                    <span className="text-xs text-muted-foreground">
+                      {dirtyCount === 0
+                        ? "No unsaved changes."
+                        : `${dirtyCount} unsaved change${dirtyCount === 1 ? "" : "s"}.`}
+                    </span>
+                    <div className="ml-auto">
+                      <Button
+                        variant="accent"
+                        size="sm"
+                        onClick={() => saveDeptChanges(dept, list)}
+                        disabled={busy || dirtyCount === 0}
+                        className="gap-1.5"
+                      >
+                        <Save className="h-3.5 w-3.5" />
+                        Save Changes
+                      </Button>
+                    </div>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -254,82 +416,74 @@ export function InventoryCatalogView({ items }: { items: CatalogItem[] }) {
 }
 
 /**
- * One row in the catalog list. Lifted out of InventoryCatalogView so
- * each row can carry its own local state for the quantity input (local
- * state is what lets a user type "123" without the number briefly
- * showing "1", "12", "123" as the parent state round-trips).
- *
- * The quantity input autosaves on blur AND when the value is unchanged
- * for 800ms — the former catches a user tabbing away or clicking off
- * the field, the latter catches "typed and then forgot about it". Both
- * paths PATCH /api/inventory/catalog/[itemId] with just { quantity }.
+ * One row in the catalog list. View mode: shows name (large) + optional
+ * description below, with the quantity on the right. Edit mode (toggled
+ * by the pencil button): name and description become inputs. Quantity is
+ * always editable when the dept is editable — it's a frequent-change
+ * value and asking the user to toggle edit mode first for a +1 would be
+ * tedious. Changes to any field are STAGED in the parent's draft state
+ * and only persisted when the user clicks the dept-level Save Changes.
  */
 function CatalogRow({
   item,
+  draft,
   canEdit,
-  onDelete,
   busy,
+  onDraftChange,
+  onDelete,
 }: {
   item: CatalogItem;
+  draft: RowDraft;
   canEdit: boolean;
-  onDelete: (item: CatalogItem) => void;
   busy: boolean;
+  onDraftChange: (patch: Partial<RowDraft>) => void;
+  onDelete: () => void;
 }) {
-  const router = useRouter();
-  // Local draft so the input doesn't flicker on parent re-renders mid-typing.
-  // Seeded from the server value, and re-synced to it whenever the server
-  // value changes (e.g. after a successful save → router.refresh() → new
-  // props). An empty string is a valid intermediate state while the user
-  // clears the field; we only persist a number.
-  const [draft, setDraft] = useState<string>(String(item.quantity));
-  const [saving, setSaving] = useState(false);
-  const lastSavedRef = useRef<number>(item.quantity);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
-    setDraft(String(item.quantity));
-    lastSavedRef.current = item.quantity;
-  }, [item.quantity]);
-
-  async function persist(nextRaw: string) {
-    if (!canEdit) return;
-    const parsed = Number(nextRaw);
-    const next = Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
-    if (next === lastSavedRef.current) return;
-    setSaving(true);
-    try {
-      const res = await fetch(apiPath(`/api/inventory/catalog/${item.id}`), {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quantity: next }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? "Failed to update quantity");
-      }
-      lastSavedRef.current = next;
-      router.refresh();
-    } catch (e) {
-      toast.error((e as Error).message);
-      // Revert the local draft to the last-known-good value so the UI
-      // doesn't keep showing an unsaved number as if it stuck.
-      setDraft(String(lastSavedRef.current));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  function scheduleDebouncedSave(nextRaw: string) {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      persist(nextRaw);
-    }, 800);
-  }
+    if (draft.editing) nameInputRef.current?.focus();
+  }, [draft.editing]);
 
   return (
-    <li className="flex items-center gap-3 px-3 py-2 text-sm">
-      <span className="flex-1 min-w-0 truncate">{item.name}</span>
-      <div className="flex items-center gap-1.5">
+    <li className="flex items-start gap-3 px-3 py-3 text-sm">
+      <div className="flex-1 min-w-0 space-y-1">
+        {draft.editing ? (
+          <>
+            <Input
+              ref={nameInputRef}
+              value={draft.name}
+              onChange={(e) => onDraftChange({ name: e.target.value })}
+              placeholder="Item name"
+              disabled={!canEdit || busy}
+              className="h-9 text-base font-semibold"
+              aria-label={`Name for ${item.name}`}
+            />
+            <Input
+              value={draft.description}
+              onChange={(e) => onDraftChange({ description: e.target.value })}
+              placeholder="Description (optional)"
+              disabled={!canEdit || busy}
+              className="h-8 text-sm"
+              aria-label={`Description for ${item.name}`}
+            />
+          </>
+        ) : (
+          <>
+            {/* "Model Name" treatment — larger, bolder than the body
+                 size the row previously used. Mirrors the H2-ish weight
+                 we use on card titles elsewhere in the app. */}
+            <div className="text-base font-semibold leading-tight truncate">
+              {draft.name.trim() || item.name}
+            </div>
+            {(draft.description || item.description) && (
+              <div className="text-xs text-muted-foreground leading-snug line-clamp-2">
+                {draft.description || item.description}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
         <label
           htmlFor={`qty-${item.id}`}
           className="text-[0.65rem] font-mono uppercase tracking-widest text-muted-foreground"
@@ -342,30 +496,39 @@ function CatalogRow({
           min={0}
           step={1}
           inputMode="numeric"
-          value={draft}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            scheduleDebouncedSave(e.target.value);
-          }}
-          onBlur={() => {
-            if (debounceRef.current) clearTimeout(debounceRef.current);
-            persist(draft);
-          }}
-          disabled={!canEdit || saving || busy}
+          value={draft.quantity}
+          onChange={(e) => onDraftChange({ quantity: e.target.value })}
+          disabled={!canEdit || busy}
           className="h-8 w-20 text-right"
           aria-label={`Quantity for ${item.name}`}
         />
       </div>
-      {canEdit && !item.isSeed && (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onDelete(item)}
-          disabled={busy || saving}
-          aria-label={`Remove ${item.name}`}
-        >
-          <Trash2 className="h-3.5 w-3.5 text-rose-500" />
-        </Button>
+      {canEdit && (
+        <div className="flex items-center gap-1 shrink-0">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onDraftChange({ editing: !draft.editing })}
+            disabled={busy}
+            aria-label={draft.editing ? `Stop editing ${item.name}` : `Edit ${item.name}`}
+            title={draft.editing ? "Collapse editor" : "Edit name & description"}
+          >
+            {draft.editing ? (
+              <X className="h-3.5 w-3.5" />
+            ) : (
+              <Pencil className="h-3.5 w-3.5" />
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onDelete}
+            disabled={busy}
+            aria-label={`Remove ${item.name}`}
+          >
+            <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+          </Button>
+        </div>
       )}
     </li>
   );

@@ -69,36 +69,75 @@ export function addCatalogItem(input: {
   return item;
 }
 
-/** Delete a custom catalog item. Seed items are protected — returns false
- *  and does nothing if called against one. */
+/** Delete any catalog item (seed or custom). Returns false only when the
+ *  id doesn't exist. Seed-protection was removed per the "Delete button
+ *  for every item" spec — if a dept wants their original seed roster
+ *  back, a process restart will rebuild it from lib/inventory-seed.ts. */
 export function deleteCatalogItem(id: string): boolean {
   const s = state();
-  const existing = s.catalog.get(id);
-  if (!existing || existing.isSeed) return false;
+  if (!s.catalog.has(id)) return false;
   return s.catalog.delete(id);
 }
 
-/** Update the catalog-level quantity (stock count) on one item.
- *  Returns the updated record, or null if the item id doesn't exist.
- *  Negative inputs and non-finite numbers are coerced to 0; fractional
- *  inputs are floored. The caller enforces the dept-scoped permission
- *  check — this helper trusts the input. */
-export function setCatalogItemQuantity(
+/** Update any subset of a catalog item's editable fields in one write.
+ *  Returns the updated record, or null if the id doesn't exist. Writes
+ *  are shallow — only the fields present in `patch` are touched. Does
+ *  NOT touch updatedAt if every field in the patch already matches the
+ *  stored value (so a no-op PATCH stays reference-equal for the caller
+ *  to detect and skip auditing). */
+export function updateCatalogItem(
   id: string,
-  quantity: number,
+  patch: { name?: string; description?: string; quantity?: number },
 ): CatalogItem | null {
   const s = state();
   const existing = s.catalog.get(id);
   if (!existing) return null;
-  const normalized = Number.isFinite(quantity) ? Math.max(0, Math.floor(quantity)) : 0;
-  if (existing.quantity === normalized) return existing;
-  const next: CatalogItem = {
-    ...existing,
-    quantity: normalized,
-    updatedAt: new Date().toISOString(),
-  };
+
+  const next: CatalogItem = { ...existing };
+  let changed = false;
+
+  if (patch.name !== undefined) {
+    const trimmed = patch.name.trim().slice(0, 200);
+    if (trimmed && trimmed !== existing.name) {
+      next.name = trimmed;
+      changed = true;
+    }
+  }
+
+  if (patch.description !== undefined) {
+    const trimmed = patch.description.trim().slice(0, 1000);
+    // Treat "" as "clear the description" rather than "no change".
+    const nextDescription = trimmed || undefined;
+    if (nextDescription !== existing.description) {
+      next.description = nextDescription;
+      changed = true;
+    }
+  }
+
+  if (patch.quantity !== undefined) {
+    const q = Number.isFinite(patch.quantity)
+      ? Math.max(0, Math.floor(patch.quantity))
+      : 0;
+    if (q !== existing.quantity) {
+      next.quantity = q;
+      changed = true;
+    }
+  }
+
+  if (!changed) return existing;
+  next.updatedAt = new Date().toISOString();
   s.catalog.set(id, next);
   return next;
+}
+
+/** @deprecated Use updateCatalogItem({ quantity }). Kept as a thin shim so
+ *  older callers (and the quantity-only PATCH path in the API route)
+ *  continue to work during the transition. */
+export function setCatalogItemQuantity(
+  id: string,
+  quantity: number,
+): CatalogItem | null {
+  return updateCatalogItem(id, { quantity });
 }
 
 // ─── Per-event ticks ──────────────────────────────────────────────────────
