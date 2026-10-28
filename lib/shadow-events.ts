@@ -1,6 +1,7 @@
 import type {
   AuthorityApproval,
   DeptRoster,
+  GamesSelection,
   ShadowDeptKey,
   ShadowEventEventlyStatus,
   ShadowEventRecord,
@@ -204,6 +205,41 @@ export function setAuthorityApproval(
   return updateShadowEvent(bookingId, {
     authorityApproval: {
       ...approval,
+      updatedAt: new Date().toISOString(),
+      updatedByUserId: userId,
+    },
+  });
+}
+
+/** Wholesale-replace the games selection on this booking's shadow
+ *  record, stamping updatedAt/updatedByUserId. Pass an empty
+ *  selectedGames array (or call clearGamesSelection below) to clear.
+ *  Caller owns the auth check. */
+export function setGamesSelection(
+  bookingId: string,
+  selection: GamesSelection,
+  userId: string,
+): ShadowEventRecord {
+  return updateShadowEvent(bookingId, {
+    games: {
+      ...selection,
+      updatedAt: new Date().toISOString(),
+      updatedByUserId: userId,
+    },
+  });
+}
+
+/** Explicitly clear the games selection — stamps updatedAt/userId so
+ *  the audit trail reflects the "I cleared this" event, rather than
+ *  silently leaving the field undefined (which would be
+ *  indistinguishable from "never set"). */
+export function clearGamesSelection(
+  bookingId: string,
+  userId: string,
+): ShadowEventRecord {
+  return updateShadowEvent(bookingId, {
+    games: {
+      selectedGames: [],
       updatedAt: new Date().toISOString(),
       updatedByUserId: userId,
     },

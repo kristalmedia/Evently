@@ -168,6 +168,11 @@ export interface ShadowEventRecord {
    *  SALES_ADMIN role holders — enforced server-side in
    *  /api/kotg/[bookingId]/authority-approval. */
   authorityApproval?: AuthorityApproval;
+  /** Sales-owned optional games selection. Absent/undefined means
+   *  nothing's been saved and the section is hidden from non-Sales
+   *  viewers. See GamesSelection type and
+   *  /api/kotg/[bookingId]/games. */
+  games?: GamesSelection;
   createdAt: string;
   updatedAt: string;
 }
@@ -219,4 +224,41 @@ export interface AuthorityApproval {
 export const EMPTY_AUTHORITY_APPROVAL: AuthorityApproval = {
   required: false,
   bodies: [],
+};
+
+// ─── Optional Games Selection (Sales-owned, per-booking) ────────────────────
+
+/** The canonical list of games Sales can pick from. Hardcoded rather than
+ *  user-managed because the business list is small, stable, and the whole
+ *  catalog belongs in version control (so a Super Admin adding "Spin the
+ *  Wheel 2" wouldn't produce a scoreable catalog that varies per
+ *  environment). If the Sales team want to extend this, add an entry here
+ *  and ship a new build. */
+export const AVAILABLE_GAMES = [
+  "Jenga",
+  "Ketupat Toss",
+  "Spin the Wheel",
+  "Drop the Mic",
+  "Proboscis Monkey",
+  "Guess the Kueh",
+  "Guess the Kampong",
+] as const;
+
+export type GameName = (typeof AVAILABLE_GAMES)[number];
+
+/** Sales-owned "which optional games are planned for this booking" block.
+ *  Entirely optional — a booking can be saved without any games. Writes
+ *  go through PUT /api/kotg/[bookingId]/games (SALES_ADMIN only); DELETE
+ *  on the same route clears the whole selection. */
+export interface GamesSelection {
+  /** Subset of AVAILABLE_GAMES. Order isn't meaningful — the server
+   *  normalises to the AVAILABLE_GAMES order on save so round-tripping
+   *  through the UI doesn't shuffle the display. */
+  selectedGames: GameName[];
+  updatedAt?: string;
+  updatedByUserId?: string;
+}
+
+export const EMPTY_GAMES_SELECTION: GamesSelection = {
+  selectedGames: [],
 };

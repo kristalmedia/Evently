@@ -43,12 +43,13 @@ import {
   MANAGER_DEPT_KEYS,
 } from "@/lib/shadow-events";
 import type { ShadowEventEventlyStatus } from "@/lib/shadow-events-types";
-import { EMPTY_AUTHORITY_APPROVAL } from "@/lib/shadow-events-types";
+import { EMPTY_AUTHORITY_APPROVAL, EMPTY_GAMES_SELECTION } from "@/lib/shadow-events-types";
 import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
 import { DeptRosterEditor } from "@/components/kotg/dept-roster-editor";
 import { HrEditor, type FlatRosterRow } from "@/components/kotg/hr-editor";
 import { ConfirmedRosterEditor } from "@/components/kotg/confirmed-roster-editor";
 import { AuthorityApprovalEditor } from "@/components/kotg/authority-approval-editor";
+import { GamesSelectionEditor } from "@/components/kotg/games-selection-editor";
 import { EventInventoryView } from "@/components/inventory/event-inventory-view";
 import { listCatalogItems, getEventInventory } from "@/lib/inventory-store";
 import {
@@ -476,6 +477,23 @@ export default async function EventDetailPage({
           initial={shadow.authorityApproval ?? EMPTY_AUTHORITY_APPROVAL}
         />
       )}
+
+      {/* Optional Games — Sales edits, everyone else sees the saved
+          selection read-only. Hidden entirely from non-Sales viewers
+          when nothing is saved to avoid an empty card for a Sales-only
+          feature. */}
+      {(() => {
+        const games = shadow.games ?? EMPTY_GAMES_SELECTION;
+        const canEditGames = hasRole(user, "SALES_ADMIN");
+        if (!canEditGames && games.selectedGames.length === 0) return null;
+        return (
+          <GamesSelectionEditor
+            bookingId={bookingId}
+            initial={games}
+            canEdit={canEditGames}
+          />
+        );
+      })()}
     </div>
   );
 }
