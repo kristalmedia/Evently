@@ -22,6 +22,7 @@ export const SEED_USERS: User[] = [
 
   // ─── General Manager — Event Administrator / Sign-Off Authority ──────────
   u({ id: "u_gm01", fullName: "Jenny Malai Ali", email: "jenny.malaiali@kristal.media", department: "General Manager", jobTitle: "General Manager", role: "MANAGER" }),
+  u({ id: "u_gm02", fullName: "Mas-Sunarita Mohd Shariff", email: "tina.shariff@kristal.media", department: "General Manager", jobTitle: "Assistant General Manager", role: "MANAGER" }),
 
   // ─── Sales — Can create events & view budgets ────────────────────────────
   u({ id: "u_s01", fullName: "Wafi Sufri", email: "wafi.sufri@kristal.media", department: "Sales", role: "SALES_ADMIN" }),
@@ -43,6 +44,11 @@ export const SEED_USERS: User[] = [
   u({ id: "u_c04", fullName: "Azim Mohamad", email: "azim.mohamad@kristal.media", department: "CCM", role: "VIEWER" }),
   u({ id: "u_c05", fullName: "Faiq Ali", email: "faiq.ali@kristal.media", department: "CCM", role: "VIEWER" }),
   u({ id: "u_c06", fullName: "Yaya Halim", email: "yaya.halim@kristal.media", department: "CCM", role: "VIEWER" }),
+  // Previously u_t04 under Technical — moved to CCM per the Oct 2026 reorg.
+  // Keeping the original user id (u_t04) so any downstream references
+  // (session cookies, audit log entries) don't break — a user id change
+  // would silently log them out of any active session.
+  u({ id: "u_t04", fullName: "Hafiz Salim", email: "hafiz.salim@kristal.media", department: "CCM", role: "VIEWER" }),
   // NOTE: personal @gmail.com address, not @kristal.media — this user
   // cannot sign in via Microsoft Entra ID (wrong tenant entirely) and the
   // seeded test-login is disabled in production, so they currently have
@@ -54,7 +60,6 @@ export const SEED_USERS: User[] = [
   u({ id: "u_t01", fullName: "Aiman Bahar", email: "aiman.bahar@kristal.media", department: "Technical", role: "VIEWER" }),
   u({ id: "u_t02", fullName: "Eddy Busu", email: "eddy.busu@kristal.media", department: "Technical", role: "VIEWER" }),
   u({ id: "u_t03", fullName: "Faris Adnan", email: "faris.adnan@kristal.media", department: "Technical", role: "VIEWER" }),
-  u({ id: "u_t04", fullName: "Hafiz Salim", email: "hafiz.salim@kristal.media", department: "Technical", role: "VIEWER" }),
   u({ id: "u_t05", fullName: "Hj Zikry Anafiah", email: "zikri.anafiah@kristal.media", department: "Technical", role: "VIEWER" }),
   u({ id: "u_t06", fullName: "Shaming Hj Kalong", email: "shaming.hjkalong@kristal.media", department: "Technical", role: "VIEWER" }),
   u({ id: "u_t07", fullName: "Izz Yakop", email: "Izz.Yakop@kristal.media", department: "Technical", role: "VIEWER" }),
