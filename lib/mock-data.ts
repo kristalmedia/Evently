@@ -18,7 +18,11 @@ export const SEED_USERS: User[] = [
   u({ id: "u_it01", fullName: "Zaki Imani", email: "zaki.imani@kristal.media", department: "IT", role: "SUPER_ADMIN" }),
   u({ id: "u_it02", fullName: "Rashid Karim", email: "rashid.karim@kristal.media", department: "IT", role: "SUPER_ADMIN" }),
   u({ id: "u_it03", fullName: "Haziq Eddrusse", email: "Haziq.edd@kristal.media", department: "IT", role: "SUPER_ADMIN" }),
-  u({ id: "u_it04", fullName: "System Administrator", email: "it.admin@kristal.media", department: "IT", jobTitle: "System Admin", role: "SUPER_ADMIN" }),
+  // Was the generic "System Administrator" / it.admin@kristal.media service
+  // account; replaced in Oct 2026 with a real person. Kept the user id
+  // (u_it04) so any session cookies / audit log entries referencing the
+  // old id stay valid — only the email/name/jobTitle fields change.
+  u({ id: "u_it04", fullName: "Wardah Amizah binti Abdullah", email: "wardah.amizah@kristal.media", department: "IT", role: "SUPER_ADMIN" }),
 
   // ─── General Manager — Event Administrator / Sign-Off Authority ──────────
   u({ id: "u_gm01", fullName: "Jenny Malai Ali", email: "jenny.malaiali@kristal.media", department: "General Manager", jobTitle: "General Manager", role: "MANAGER" }),
@@ -30,6 +34,7 @@ export const SEED_USERS: User[] = [
   u({ id: "u_s03", fullName: "Nabil Mahrub", email: "nabil.mahrub@kristal.media", department: "Sales", role: "SALES_ADMIN" }),
   u({ id: "u_s04", fullName: "Didi Razak", email: "didi.razak@kristal.media", department: "Sales", role: "SALES_ADMIN" }),
   u({ id: "u_s05", fullName: "Hazwan Hassan", email: "hazwan.hassan@kristal.media", department: "Sales", role: "SALES_ADMIN" }),
+  u({ id: "u_s06", fullName: "Mohd Waez Asyraf bin Haji Mohd Sallehin Kee", email: "sales.assistant@kristal.media", department: "Sales", role: "SALES_ADMIN" }),
 
   // ─── Finance ─────────────────────────────────────────────────────────────
   u({ id: "u_f01", fullName: "Khairuddin Rosli", email: "khairuddin.rosli@kristal.media", department: "Finance", jobTitle: "Sign-Off Authority", role: "FINANCIAL_ADMIN" }),
@@ -65,9 +70,10 @@ export const SEED_USERS: User[] = [
   u({ id: "u_t07", fullName: "Izz Yakop", email: "Izz.Yakop@kristal.media", department: "Technical", role: "VIEWER" }),
   u({ id: "u_t08", fullName: "Rafaiee Omar", email: "rafaiee.omar@kristal.media", department: "Technical", role: "VIEWER" }),
   u({ id: "u_t09", fullName: "Qawi Zainal Ariffin", email: "qawi.zainalariffin@kristal.media", department: "Technical", role: "VIEWER" }),
-  // NOTE: personal @gmail.com address, not @kristal.media — same sign-in
-  // caveat as u_c07 above (no Entra tenant match, test-login is off in prod).
-  u({ id: "u_t10", fullName: "Ahmad Nur Rasif bin Haji Yusri", email: "rasifhy@gmail.com", department: "Technical", role: "VIEWER" }),
+  // Previously had a personal @gmail.com address with a sign-in caveat;
+  // switched to the proper @kristal.media email in Oct 2026 so Entra ID
+  // sign-in works. User id (u_t10) is unchanged.
+  u({ id: "u_t10", fullName: "Ahmad Nur Rasif bin Haji Yusri", email: "rasif.yusri@kristal.media", department: "Technical", role: "VIEWER" }),
 
   // ─── HR — Viewer ─────────────────────────────────────────────────────────
   // Putri — Finance Lead. Exclusive editor of Section 5 (Financial) during
