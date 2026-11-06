@@ -20,6 +20,12 @@
  *                     exact grant; currently mirrors read-only + roster
  *                     visibility until a fuller spec lands)
  *   INVENTORY_ADMIN — dedicated inventory-management tier (same caveat)
+ *   TECH_ADMIN      — dedicated Technical-dept admin tier, parallel to
+ *                     INVENTORY_ADMIN / ROSTER_ADMIN. Same baseline
+ *                     read grants plus master-inventory browse access
+ *                     (see ROLE_PERMISSIONS). Typically held by
+ *                     Technical-dept staff alongside User.department =
+ *                     "Technical".
  */
 export type Role =
   | "SUPER_ADMIN"
@@ -31,7 +37,8 @@ export type Role =
   | "HR"
   | "VIEWER"
   | "ROSTER_ADMIN"
-  | "INVENTORY_ADMIN";
+  | "INVENTORY_ADMIN"
+  | "TECH_ADMIN";
 
 export type Department =
   | "Sales"

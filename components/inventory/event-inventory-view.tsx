@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Boxes, Download, FileDown, Lock, Save } from "lucide-react";
+import { Boxes, Download, FileDown, Filter, Lock, Save } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -57,6 +57,33 @@ function canEditDeptClient(
   return false;
 }
 
+/** Client-side mirror of primaryInventoryDeptForUser in
+ *  lib/inventory-permissions.ts. Returns the InventoryDept that should
+ *  be the user's default focus on the event checklist — their roster-
+ *  lead dept, then their admin-role implied dept, falling back to null
+ *  (meaning "show all departments by default"). */
+function primaryDeptForUserClient(
+  user: ReturnType<typeof useSessionStore.getState>["user"],
+): InventoryDept | null {
+  if (!user || user.status === "disabled") return null;
+  if (hasRole(user, "INVENTORY_ADMIN") && user.inventoryDept) {
+    return user.inventoryDept;
+  }
+  if (hasRole(user, "MANAGER")) {
+    const rosterKey = rosterDeptKeyForDepartment(user.department);
+    if (rosterKey && ROSTER_DEPT_TO_INVENTORY_DEPT[rosterKey]) {
+      return ROSTER_DEPT_TO_INVENTORY_DEPT[rosterKey] ?? null;
+    }
+  }
+  if (hasRole(user, "SALES_ADMIN")) return "SALES";
+  if (hasRole(user, "TECH_ADMIN")) return "TECH_OPS";
+  if (hasRole(user, "CCM_ADMIN")) return "CCM_TECH_OPS";
+  return null;
+}
+
+/** Filter options: "ALL" (show every dept) or a specific InventoryDept. */
+type DeptFilter = "ALL" | InventoryDept;
+
 export function EventInventoryView({
   bookingId,
   displayTitle,
@@ -76,6 +103,24 @@ export function EventInventoryView({
   const currentUser = useSessionStore((s) => s.user);
   const [ticks, setTicks] = useState<Record<string, EventInventoryTick>>(initialTicks);
   const [busy, setBusy] = useState(false);
+
+  // Default the filter to the user's primary inventory dept — a Tech
+  // Admin lands on TECH_OPS, a Sales Admin on SALES, etc. Users with no
+  // primary dept (Super Admin, generic Inventory Admin, a FINANCIAL_ADMIN
+  // viewer) default to "ALL". Local state only; no URL/query persistence.
+  const [deptFilter, setDeptFilter] = useState<DeptFilter>(
+    () => primaryDeptForUserClient(currentUser) ?? "ALL",
+  );
+
+  // Which depts actually appear on the page given the active filter.
+  // "ALL" preserves INVENTORY_DEPT_ORDER; otherwise just the selected
+  // dept. Items outside the filter are hidden but their existing ticks
+  // are preserved in local state — switching filters restores them
+  // without a server round-trip.
+  const visibleDepts = useMemo<readonly InventoryDept[]>(
+    () => (deptFilter === "ALL" ? INVENTORY_DEPT_ORDER : [deptFilter]),
+    [deptFilter],
+  );
 
   const grouped = useMemo(() => {
     const g = new Map<InventoryDept, CatalogItem[]>();
@@ -151,10 +196,39 @@ export function EventInventoryView({
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
+        <CardTitle className="text-base flex items-center gap-2 flex-wrap">
           <Boxes className="h-4 w-4 text-accent" />
           <span>Inventory checklist</span>
           <span className="ml-auto flex flex-wrap items-center gap-2">
+            {/* Dept filter — defaults to the user's primary dept so a
+                Tech Admin opening an event lands on TECH_OPS, etc.
+                "All departments" is the comprehensive view option the
+                spec names explicitly; available to everyone, not just
+                elevated admins — since master catalog read access is
+                granted at the role level (see
+                MASTER_INVENTORY_READ_ROLES), hiding the toggle from
+                some admins would be inconsistent. */}
+            <label
+              htmlFor="inventory-dept-filter"
+              className="inline-flex items-center gap-1 text-[0.65rem] font-mono uppercase tracking-widest text-muted-foreground"
+            >
+              <Filter className="h-3 w-3" />
+              Dept
+            </label>
+            <select
+              id="inventory-dept-filter"
+              value={deptFilter}
+              onChange={(e) => setDeptFilter(e.target.value as DeptFilter)}
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+              aria-label="Filter checklist by department"
+            >
+              <option value="ALL">All departments</option>
+              {INVENTORY_DEPT_ORDER.map((dept) => (
+                <option key={dept} value={dept}>
+                  {INVENTORY_DEPT_LABEL[dept]}
+                </option>
+              ))}
+            </select>
             <Button
               variant="outline"
               size="sm"
@@ -177,7 +251,16 @@ export function EventInventoryView({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
-        {INVENTORY_DEPT_ORDER.map((dept) => {
+        {/* Single-dept filter with zero items — show an empty state so
+            the filter looks responsive rather than silently rendering
+            nothing (which would read as broken UI). "All" view omits
+            empty depts as before. */}
+        {deptFilter !== "ALL" && (grouped.get(deptFilter) ?? []).length === 0 && (
+          <div className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
+            No items in the {INVENTORY_DEPT_LABEL[deptFilter]} section yet.
+          </div>
+        )}
+        {visibleDepts.map((dept) => {
           const list = grouped.get(dept) ?? [];
           if (list.length === 0) return null;
           const canEdit = canEditDeptClient(currentUser, dept);

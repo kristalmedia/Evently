@@ -78,6 +78,7 @@ const ROLES: Role[] = [
   "VIEWER",
   "ROSTER_ADMIN",
   "INVENTORY_ADMIN",
+  "TECH_ADMIN",
 ];
 
 export function UserManagementTable({ initialUsers }: { initialUsers: User[] }) {

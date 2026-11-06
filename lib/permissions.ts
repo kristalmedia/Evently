@@ -16,6 +16,8 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   SALES_ADMIN: [
     // Formerly BROADCAST_ADMIN — Sales team. Creates + edits events with
     // Staff/Financial sections hidden entirely from their form nav.
+    // Holds inventory.view (master-catalog browse) per the 5-admin-read
+    // rule — see the Nov 2026 permission reshuffle in this file.
     "dashboard.view",
     "events.view",
     "events.create",
@@ -28,10 +30,12 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "calendar.view",
     "reports.view",
     "notifications.view",
+    "inventory.view",
   ],
   CCM_ADMIN: [
     // Mirror of SALES_ADMIN, scoped to CCM-department event ownership.
-    // Section access is identical — no Staff/Financial editing.
+    // Section access is identical — no Staff/Financial editing. Also
+    // holds inventory.view per the 5-admin-read rule.
     "dashboard.view",
     "events.view",
     "events.create",
@@ -44,6 +48,7 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "calendar.view",
     "reports.view",
     "notifications.view",
+    "inventory.view",
   ],
   MANAGER: [
     // Staff editor (per-event, status-gated). Also handles Sign-off (s8).
@@ -74,12 +79,15 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   FINANCIAL_ADMIN: [
     // Rudy — Second Approver in the sign-off chain. Financial edit was
     // moved to FINANCE_LEAD to make Putri's "exclusive access" real.
+    // This is the role that fulfills the "Finance Admin" slot in the
+    // 5-admin-read rule for the master inventory catalog.
     "dashboard.view",
     "events.view",
     "budget.view",
     "calendar.view",
     "reports.view",
     "notifications.view",
+    "inventory.view",
   ],
   HR: [
     // HR owns the overtime + meal-allowance block on every KOTG booking
@@ -116,13 +124,32 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "notifications.view",
   ],
   INVENTORY_ADMIN: [
-    // Baseline read across common surfaces. Actual inventory access is
-    // dept-scoped by User.inventoryDept — enforced at the endpoint and
-    // UI layer via lib/inventory-permissions.ts, not via a permission
-    // grant here. Holding this role alone doesn't authorise editing any
-    // dept; a Super Admin must additionally assign an inventoryDept.
+    // Baseline read across common surfaces. Actual inventory EDIT access
+    // is dept-scoped by User.inventoryDept — enforced at the endpoint
+    // and UI layer via lib/inventory-permissions.ts, not via a
+    // permission grant here. Holding this role alone doesn't authorise
+    // editing any dept; a Super Admin must additionally assign an
+    // inventoryDept. inventory.view here grants browse rights to the
+    // master catalog (every dept, read-only).
     "dashboard.view",
     "events.view",
+    "calendar.view",
+    "reports.view",
+    "notifications.view",
+    "inventory.view",
+  ],
+  TECH_ADMIN: [
+    // Technical-dept admin tier. Same baseline as SALES_ADMIN / CCM_ADMIN
+    // but scoped to Technical: holds master inventory.view and the
+    // event-catalog surfaces. Dept-level inventory EDIT is NOT granted by
+    // this role alone — Technical edit flows from being the TECH
+    // roster-lead (Manager whose department is "Technical") or from
+    // holding INVENTORY_ADMIN with inventoryDept=TECH_OPS. Same
+    // dept-scoping pattern we already use for the other admins.
+    "dashboard.view",
+    "events.view",
+    "events.edit",
+    "budget.view",
     "calendar.view",
     "reports.view",
     "notifications.view",
@@ -436,4 +463,5 @@ export const ROLE_LABEL: Record<Role, string> = {
   VIEWER: "Viewer",
   ROSTER_ADMIN: "Roster Admin",
   INVENTORY_ADMIN: "Inventory Admin",
+  TECH_ADMIN: "Tech Admin",
 };
