@@ -52,6 +52,7 @@ import { AuthorityApprovalEditor } from "@/components/kotg/authority-approval-ed
 import { GamesSelectionEditor } from "@/components/kotg/games-selection-editor";
 import { EventInventoryView } from "@/components/inventory/event-inventory-view";
 import { listCatalogItems, getEventInventory } from "@/lib/inventory-store";
+import { EVENT_STATUSES } from "@/lib/constants";
 import {
   canViewAnyInventoryDept,
   canViewInventory,
@@ -463,6 +464,15 @@ export default async function EventDetailPage({
           displayTitle={kotgDisplayTitle(kotg)}
           clientName={kotgOrganizerLabel(kotg)}
           venue={kotg.booking.LocationDetails || undefined}
+          startDate={kotg.booking.StartDate || undefined}
+          endDate={kotg.booking.EndDate || undefined}
+          // Resolve the EventStatus enum to a human label (e.g.
+          // "Confirmed Event" for PUBLISHED) using the canonical
+          // EVENT_STATUSES table. Falls back to the raw enum value for
+          // any unseen status — defensive, shouldn't fire in practice.
+          statusLabel={
+            EVENT_STATUSES.find((s) => s.value === row.status)?.label ?? row.status
+          }
           items={inventoryItems}
           initialTicks={inventoryRecord.ticks}
         />

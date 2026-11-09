@@ -89,6 +89,9 @@ export function EventInventoryView({
   displayTitle,
   clientName,
   venue,
+  startDate,
+  endDate,
+  statusLabel,
   items,
   initialTicks,
 }: {
@@ -96,6 +99,13 @@ export function EventInventoryView({
   displayTitle: string;
   clientName?: string;
   venue?: string;
+  /** Event start/end from the Sales sheet — passed through verbatim to
+   *  the export so the PDF header + CSV columns carry real dates. */
+  startDate?: string;
+  endDate?: string;
+  /** UI-side event status label (e.g. "Upcoming", "Confirmed") passed
+   *  through to the PDF header. */
+  statusLabel?: string;
   items: CatalogItem[];
   initialTicks: Record<string, EventInventoryTick>;
 }) {
@@ -177,12 +187,32 @@ export function EventInventoryView({
   }
 
   function doExportCsv() {
-    exportInventoryCsv({ bookingId, displayTitle, clientName, venue, items, ticks });
+    exportInventoryCsv({
+      bookingId,
+      displayTitle,
+      clientName,
+      venue,
+      startDate,
+      endDate,
+      statusLabel,
+      items,
+      ticks,
+    });
   }
 
   async function doExportPdf() {
     try {
-      await exportInventoryPdf({ bookingId, displayTitle, clientName, venue, items, ticks });
+      await exportInventoryPdf({
+        bookingId,
+        displayTitle,
+        clientName,
+        venue,
+        startDate,
+        endDate,
+        statusLabel,
+        items,
+        ticks,
+      });
     } catch (e) {
       toast.error(`PDF export failed: ${(e as Error).message}`);
     }
