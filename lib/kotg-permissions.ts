@@ -30,17 +30,15 @@ const INVENTORY_DEPT_TO_SHADOW_DEPT: Partial<Record<InventoryDept, ShadowDeptKey
  * depend on the shadow record's eventlyStatus, which lib/permissions is
  * deliberately kept independent of.
  *
- * Roster surfaces (view AND edit) are gated to exactly three roles —
- * MANAGER, ROSTER_ADMIN, INVENTORY_ADMIN. This narrower-than-default
- * matrix is deliberate (explicit product decision, see commit message)
- * and intentionally departs from the "Super Admin bypasses everything"
- * pattern used elsewhere in the app: Super Admin has NO roster access
- * unless they also hold one of the three authorised roles.
+ * Roster surfaces (view AND edit) are gated to three roles — MANAGER,
+ * ROSTER_ADMIN, INVENTORY_ADMIN — each strict per-dept. SUPER_ADMIN
+ * also has god-mode access (bypasses role AND dept scoping), restored
+ * after the Nov 2026 "strict" pass to match the rest of the app's
+ * Super-Admin-bypasses-everything pattern.
  *
  * HR's separate meal-ticks / OT editor (canEditHr, canEditHrOvertime
  * below) is NOT part of "the roster" and still grants HR access as
- * before — HR's OT/meal workflow would otherwise be unperformable, and
- * removing it was out of scope for the roster-access change.
+ * before — HR's OT/meal workflow would otherwise be unperformable.
  */
 export const ROSTER_AUTHORIZED_ROLES: readonly Role[] = [
   "MANAGER",
@@ -50,9 +48,10 @@ export const ROSTER_AUTHORIZED_ROLES: readonly Role[] = [
 
 /** Does this user hold any role that grants roster-feature access?
  *  Baseline for every other roster helper in this file — if this is
- *  false, the user sees no roster surfaces at all. */
+ *  false, the user sees no roster surfaces at all. Super Admin bypass. */
 export function canAccessRoster(user: User | null | undefined): boolean {
   if (!user || user.status === "disabled") return false;
+  if (isSuperAdmin(user)) return true;
   return hasAnyRole(user, ROSTER_AUTHORIZED_ROLES);
 }
 
@@ -122,7 +121,7 @@ export function editableDeptForManager(
 }
 
 /** Full authorisation check for editing a specific dept's roster block.
- *  All three ROSTER_AUTHORIZED_ROLES are now dept-scoped (Nov 2026):
+ *  All three ROSTER_AUTHORIZED_ROLES are strict per-dept (Nov 2026):
  *    - MANAGER: edits only their own department (via User.department).
  *    - ROSTER_ADMIN: edits only their own department (via User.department,
  *      same mechanism as Manager).
@@ -135,14 +134,17 @@ export function editableDeptForManager(
  *  A user who holds multiple roles (e.g. MANAGER + INVENTORY_ADMIN) is
  *  authorised for the UNION of their scopes.
  *
- *  HR, Finance Lead, and Super Admin have NO roster edit access. The
- *  eventlyStatus argument is retained for API-signature stability but
- *  no longer gates anything here. */
+ *  Super Admin bypasses both the role and dept checks (god-mode). HR
+ *  and Finance Lead have no roster edit access. The eventlyStatus
+ *  argument is retained for API-signature stability but no longer
+ *  gates anything here. */
 export function canEditDept(
   user: User | null | undefined,
   deptKey: ShadowDeptKey,
   _eventlyStatus: ShadowEventEventlyStatus,
 ): boolean {
+  if (!user || user.status === "disabled") return false;
+  if (isSuperAdmin(user)) return true;
   if (!canAccessRoster(user)) return false;
   return allOwnedRosterDepts(user).includes(deptKey);
 }
@@ -214,22 +216,22 @@ export function canEditFinance(
   return hasRole(user, "FINANCE_LEAD") && eventlyStatus === "FINANCE_UNLOCKED";
 }
 
-/** Read access to the full roster (every dept, not just one). Nobody
- *  now gets full-roster read via the roster permission layer — every
- *  authorised role is dept-scoped (Nov 2026 strict-dept rewrite), so
- *  cross-dept visibility would only come from HR's flat-roster surface
- *  or Super Admin tooling that bypasses these gates. Returns false for
- *  every user; retained as an exported symbol for API-signature
- *  stability with earlier call sites. */
+/** Read access to the full roster (every dept, not just one). Only
+ *  Super Admin qualifies — every other authorised role is dept-scoped
+ *  (Nov 2026 strict-dept rewrite), so cross-dept visibility is a
+ *  god-mode-only capability. The eventlyStatus argument is retained
+ *  for API-signature stability but no longer gates anything here. */
 export function canViewFullRoster(
-  _user: User | null | undefined,
+  user: User | null | undefined,
   _eventlyStatus: ShadowEventEventlyStatus,
 ): boolean {
-  return false;
+  if (!user || user.status === "disabled") return false;
+  return isSuperAdmin(user);
 }
 
 /** Which dept keys should this user see on the event detail page's
- *  roster grid? Strict per-dept (Nov 2026):
+ *  roster grid? Strict per-dept (Nov 2026), with Super Admin bypass:
+ *    - SUPER_ADMIN: every department (god-mode).
  *    - MANAGER: their own department (via User.department).
  *    - ROSTER_ADMIN: their own department (via User.department).
  *    - INVENTORY_ADMIN: the roster dept corresponding to their
@@ -241,12 +243,13 @@ export function canViewFullRoster(
  *  Finance, General Manager, Unassigned) contributes nothing from the
  *  Manager/RosterAdmin side; similarly an INVENTORY_ADMIN assigned to
  *  EVENTS/OTHERS contributes nothing. A user with zero contributions
- *  across all roles sees no roster cards at all. */
+ *  across all roles (and no Super Admin tag) sees no roster cards. */
 export function visibleDeptKeysForShadow(
   user: User | null | undefined,
   _eventlyStatus: ShadowEventEventlyStatus,
 ): readonly ShadowDeptKey[] {
   if (!user) return [];
+  if (isSuperAdmin(user)) return MANAGER_DEPT_KEYS;
   if (!canAccessRoster(user)) return [];
   return allOwnedRosterDepts(user);
 }
