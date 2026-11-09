@@ -61,7 +61,7 @@ function canEditDeptClient(
  *  lib/inventory-permissions.ts. Returns the InventoryDept that should
  *  be the user's default focus on the event checklist — their roster-
  *  lead dept, then their admin-role implied dept, falling back to null
- *  (meaning "show all departments by default"). */
+ *  (meaning "show all departments the user can access by default"). */
 function primaryDeptForUserClient(
   user: ReturnType<typeof useSessionStore.getState>["user"],
 ): InventoryDept | null {
@@ -79,6 +79,20 @@ function primaryDeptForUserClient(
   if (hasRole(user, "TECH_ADMIN")) return "TECH_OPS";
   if (hasRole(user, "CCM_ADMIN")) return "CCM_TECH_OPS";
   return null;
+}
+
+/** The set of InventoryDepts this user can view on the client — derived
+ *  from the server-filtered `items` prop so we don't duplicate the
+ *  authorization logic. Used to constrain the dept-filter dropdown so a
+ *  SALES_ADMIN (who only sees SALES items) doesn't see a TECH_OPS option
+ *  that renders nothing. If items spans every dept the user is a
+ *  Super Admin, so the dropdown shows every option as before. */
+function accessibleDeptsFromItems(
+  items: readonly CatalogItem[],
+): readonly InventoryDept[] {
+  const present = new Set<InventoryDept>();
+  for (const item of items) present.add(item.dept);
+  return INVENTORY_DEPT_ORDER.filter((dept) => present.has(dept));
 }
 
 /** Filter options: "ALL" (show every dept) or a specific InventoryDept. */
@@ -148,14 +162,24 @@ export function EventInventoryView({
     () => primaryDeptForUserClient(currentUser) ?? "ALL",
   );
 
+  // The depts this user can access on the current event — derived from
+  // the server-filtered `items` prop. Drives both the dept-filter
+  // dropdown options and the "ALL" expansion below, so a scoped user
+  // doesn't see a dept option that renders nothing.
+  const accessibleDepts = useMemo(
+    () => accessibleDeptsFromItems(items),
+    [items],
+  );
+
   // Which depts actually appear on the page given the active filter.
-  // "ALL" preserves INVENTORY_DEPT_ORDER; otherwise just the selected
-  // dept. Items outside the filter are hidden but their existing ticks
-  // are preserved in local state — switching filters restores them
-  // without a server round-trip.
+  // "ALL" expands to the user's accessible set (not the whole
+  // INVENTORY_DEPT_ORDER — a SALES_ADMIN's "all" is SALES only);
+  // otherwise just the selected dept. Items outside the filter are
+  // hidden but their existing ticks are preserved in local state —
+  // switching filters restores them without a server round-trip.
   const visibleDepts = useMemo<readonly InventoryDept[]>(
-    () => (deptFilter === "ALL" ? INVENTORY_DEPT_ORDER : [deptFilter]),
-    [deptFilter],
+    () => (deptFilter === "ALL" ? accessibleDepts : [deptFilter]),
+    [deptFilter, accessibleDepts],
   );
 
   const grouped = useMemo(() => {
@@ -294,12 +318,11 @@ export function EventInventoryView({
           <span className="ml-auto flex flex-wrap items-center gap-2">
             {/* Dept filter — defaults to the user's primary dept so a
                 Tech Admin opening an event lands on TECH_OPS, etc.
-                "All departments" is the comprehensive view option the
-                spec names explicitly; available to everyone, not just
-                elevated admins — since master catalog read access is
-                granted at the role level (see
-                MASTER_INVENTORY_READ_ROLES), hiding the toggle from
-                some admins would be inconsistent. */}
+                "All departments" is the comprehensive view option; for
+                a strict-scope user (SALES_ADMIN, TECH_ADMIN, etc.) this
+                means "every dept you can access" — the list below is
+                narrowed to the depts actually present in `items`, which
+                the server has pre-filtered via canViewInventory. */}
             <label
               htmlFor="inventory-dept-filter"
               className="inline-flex items-center gap-1 text-[0.65rem] font-mono uppercase tracking-widest text-muted-foreground"
@@ -315,7 +338,7 @@ export function EventInventoryView({
               aria-label="Filter checklist by department"
             >
               <option value="ALL">All departments</option>
-              {INVENTORY_DEPT_ORDER.map((dept) => (
+              {accessibleDepts.map((dept) => (
                 <option key={dept} value={dept}>
                   {INVENTORY_DEPT_LABEL[dept]}
                 </option>

@@ -16,8 +16,9 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   SALES_ADMIN: [
     // Formerly BROADCAST_ADMIN — Sales team. Creates + edits events with
     // Staff/Financial sections hidden entirely from their form nav.
-    // Holds inventory.view (master-catalog browse) per the 5-admin-read
-    // rule — see the Nov 2026 permission reshuffle in this file.
+    // Holds inventory.view for the sidebar nav; the actual data horizon
+    // is strict per-dept (SALES only, view-only), enforced by
+    // lib/inventory-permissions.ts.
     "dashboard.view",
     "events.view",
     "events.create",
@@ -35,7 +36,8 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   CCM_ADMIN: [
     // Mirror of SALES_ADMIN, scoped to CCM-department event ownership.
     // Section access is identical — no Staff/Financial editing. Also
-    // holds inventory.view per the 5-admin-read rule.
+    // holds inventory.view for the sidebar nav; data horizon is strict
+    // per-dept (CCM_TECH_OPS only, view-only).
     "dashboard.view",
     "events.view",
     "events.create",
@@ -79,15 +81,16 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   FINANCIAL_ADMIN: [
     // Rudy — Second Approver in the sign-off chain. Financial edit was
     // moved to FINANCE_LEAD to make Putri's "exclusive access" real.
-    // This is the role that fulfills the "Finance Admin" slot in the
-    // 5-admin-read rule for the master inventory catalog.
+    // No inventory.view: under the strict-per-dept inventory rule
+    // (Nov 2026) FINANCIAL_ADMIN has no matching inventory section, so
+    // the sidebar entry would land on a bounce-to-dashboard and the
+    // nav would mislead rather than inform.
     "dashboard.view",
     "events.view",
     "budget.view",
     "calendar.view",
     "reports.view",
     "notifications.view",
-    "inventory.view",
   ],
   HR: [
     // HR owns the overtime + meal-allowance block on every KOTG booking
@@ -124,13 +127,12 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "notifications.view",
   ],
   INVENTORY_ADMIN: [
-    // Baseline read across common surfaces. Actual inventory EDIT access
-    // is dept-scoped by User.inventoryDept — enforced at the endpoint
-    // and UI layer via lib/inventory-permissions.ts, not via a
-    // permission grant here. Holding this role alone doesn't authorise
-    // editing any dept; a Super Admin must additionally assign an
-    // inventoryDept. inventory.view here grants browse rights to the
-    // master catalog (every dept, read-only).
+    // Baseline read across common surfaces. Actual inventory access
+    // (view AND edit) is dept-scoped by User.inventoryDept — enforced
+    // at the endpoint and UI layer via lib/inventory-permissions.ts,
+    // not via a permission grant here. Holding this role alone (without
+    // a Super-Admin-assigned inventoryDept) gives zero inventory
+    // horizon — the sidebar entry would land on a bounce-to-dashboard.
     "dashboard.view",
     "events.view",
     "calendar.view",
@@ -140,12 +142,11 @@ const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
   TECH_ADMIN: [
     // Technical-dept admin tier. Same baseline as SALES_ADMIN / CCM_ADMIN
-    // but scoped to Technical: holds master inventory.view and the
-    // event-catalog surfaces. Dept-level inventory EDIT is NOT granted by
-    // this role alone — Technical edit flows from being the TECH
-    // roster-lead (Manager whose department is "Technical") or from
-    // holding INVENTORY_ADMIN with inventoryDept=TECH_OPS. Same
-    // dept-scoping pattern we already use for the other admins.
+    // but scoped to Technical: holds inventory.view for the sidebar nav;
+    // data horizon is strict per-dept (TECH_OPS only, view-only). Edit
+    // flows from being the TECH roster-lead (Manager whose department is
+    // "Technical") or from holding INVENTORY_ADMIN with
+    // inventoryDept=TECH_OPS.
     "dashboard.view",
     "events.view",
     "events.edit",

@@ -145,10 +145,11 @@ export default async function EventDetailPage({
   });
 
   // Inventory checklist — global catalog + this booking's per-item ticks.
-  // View and modify go together per the dept-roster-lead rule. Users
-  // see only the sections for depts they lead (via roster) or are
-  // assigned to (via INVENTORY_ADMIN); the inventory card is hidden
-  // entirely from users with no accessible depts.
+  // Strict per-dept: users see only the sections for depts they lead
+  // (via roster), are assigned to (via INVENTORY_ADMIN), or match their
+  // admin-role home (SALES_ADMIN → SALES, etc., view-only). The
+  // inventory card is hidden entirely from users with no accessible
+  // depts.
   const canSeeInventory = canViewAnyInventoryDept(user);
   const inventoryItems = canSeeInventory
     ? listCatalogItems().filter((item) => canViewInventory(user, item.dept))

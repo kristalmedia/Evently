@@ -14,9 +14,12 @@ export default async function InventoryPage() {
   // with no accessible depts is bounced back to the dashboard rather
   // than shown an empty catalog page.
   if (!canViewAnyInventoryDept(user)) redirect("/dashboard");
-  // Filter the catalog down to just the sections the user is allowed to
-  // see — a Manager of IT only sees the IT section, etc. Super Admin
-  // sees every section as before via the bypass inside canViewInventory.
+  // Strict per-dept filter: a user only sees the inventory sections
+  // their role/assignment directly grants (SALES_ADMIN → SALES,
+  // TECH_ADMIN → TECH_OPS, Manager of IT → IT, INVENTORY_ADMIN with
+  // inventoryDept=X → X). Super Admin sees every section via the bypass
+  // inside canViewInventory. See lib/inventory-permissions.ts for the
+  // full rule set.
   const items = listCatalogItems().filter((item) => canViewInventory(user, item.dept));
   return (
     <div className="space-y-6">

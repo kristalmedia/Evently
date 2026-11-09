@@ -1,41 +1,35 @@
-import type { Role, User } from "./types";
+import type { User } from "./types";
 import type { InventoryDept } from "./inventory-types";
 import { INVENTORY_DEPT_ORDER } from "./inventory-types";
-import { hasAnyRole, hasRole, isSuperAdmin, rosterDeptKeyForDepartment } from "./permissions";
+import { hasRole, isSuperAdmin, rosterDeptKeyForDepartment } from "./permissions";
 
 /**
- * Authorization rules for the inventory feature.
+ * Authorization rules for the inventory feature — strict per-department
+ * scoping for every role (Nov 2026 rewrite; see git log for the prior
+ * "5 admin roles get master-catalog read" model this replaces).
  *
- * View and edit are now SEPARATE rules (as of the Nov 2026 reshuffle):
+ * The rule is a single predicate (dept, user) → bool, applied identically
+ * to VIEW and EDIT: a user who can see dept X can modify dept X, and a
+ * user who can modify dept X obviously can see it. There is no broader
+ * read-across-all-depts tier any more — a user's inventory horizon is
+ * exactly the set of depts in which they have a concrete assignment.
  *
- *   VIEW — the five admin roles get read access to every department's
- *          master catalog. The rule: "all 5 admin roles must have full
- *          read/browsing access to the complete master inventory
- *          catalog." Plus Super Admin bypass as always, plus anyone with
- *          dept-scoped edit also sees their own dept.
+ * Super Admin bypasses the dept check entirely (god-mode, unchanged).
  *
- *   EDIT — unchanged. A user can edit dept X if ANY of:
- *     1. Super Admin (god-mode).
- *     2. Roster lead for the matching dept (Manager whose
- *        User.department maps via ROSTER_DEPT_TO_INVENTORY_DEPT).
- *     3. INVENTORY_ADMIN with User.inventoryDept === X.
+ * How a non-super-admin user acquires access to dept X:
+ *   1. They are the roster lead for the matching dept — i.e. a MANAGER
+ *      whose User.department maps to X via ROSTER_DEPT_TO_INVENTORY_DEPT.
+ *   2. They hold INVENTORY_ADMIN AND User.inventoryDept === X.
+ *   3. They hold an admin role whose "home" inventory dept is X:
+ *      SALES_ADMIN → SALES, TECH_ADMIN → TECH_OPS, CCM_ADMIN → CCM_TECH_OPS.
+ *      This tier is VIEW-only — edit still requires rule 1 or 2.
  *
- * Non-admin roles (VIEWER, HR, FINANCE_LEAD, MANAGER-without-matching-
- * dept) see nothing at all unless they also hold one of the five admin
- * tags or are the roster lead / Inventory-Admin for a specific dept.
+ * Roles that match none of the above (VIEWER, HR, FINANCE_LEAD,
+ * FINANCIAL_ADMIN, ROSTER_ADMIN, a plain MANAGER whose department has no
+ * matching inventory section, an INVENTORY_ADMIN without an assignment)
+ * see no inventory at all. The page-level guard in app/(main)/inventory
+ * redirects them to the dashboard.
  */
-
-/** The five admin roles the spec grants master-catalog read access to.
- *  Kept as a const so the list has one source of truth across the view
- *  check, the sidebar permission grants in lib/permissions.ts, and any
- *  future "list every admin" surface. */
-export const MASTER_INVENTORY_READ_ROLES: readonly Role[] = [
-  "INVENTORY_ADMIN",
-  "SALES_ADMIN",
-  "CCM_ADMIN",
-  "TECH_ADMIN",
-  "FINANCIAL_ADMIN",
-];
 
 /** Maps the roster-side ShadowDeptKey the user leads (derived from
  *  User.department via rosterDeptKeyForDepartment) to the InventoryDept
@@ -64,51 +58,39 @@ export function inventoryDeptForRosterLead(
   return ROSTER_DEPT_TO_INVENTORY_DEPT[rosterKey] ?? null;
 }
 
-/** Maps an admin role to the InventoryDept it is "primarily responsible"
- *  for — used to seed the default dept filter on the per-event checklist
- *  (and surfaced in the user-facing badge there). Non-admin roles map
- *  to null, as do the broad-access ones (INVENTORY_ADMIN, which spans
- *  every dept by design).
- *
- *  FINANCIAL_ADMIN has no matching inventory dept, so defaults to
- *  "show all" — the role has catalog read but not a specific home. */
+/** Admin-role → "home" inventory dept. Used to grant VIEW-only access
+ *  under rule 3, and surfaced in the UI as the default dept-filter value
+ *  on the per-event checklist. Any admin role NOT in this map (e.g.
+ *  FINANCIAL_ADMIN, which has no corresponding inventory section)
+ *  contributes no inventory access by its tag alone. */
+const INVENTORY_HOME_DEPT_BY_ADMIN_ROLE: Partial<Record<string, InventoryDept>> = {
+  SALES_ADMIN: "SALES",
+  TECH_ADMIN: "TECH_OPS",
+  CCM_ADMIN: "CCM_TECH_OPS",
+};
+
+/** The InventoryDept this user treats as their "home" — used to seed the
+ *  default dept filter on the per-event checklist (and surfaced in the
+ *  user-facing badge there). INVENTORY_ADMIN's explicit assignment wins
+ *  over the roster-lead mapping; the roster-lead mapping wins over the
+ *  admin-role fallback. Returns null for roles with no mapping. */
 export function primaryInventoryDeptForUser(
   user: User | null | undefined,
 ): InventoryDept | null {
   if (!user || user.status === "disabled") return null;
-  // INVENTORY_ADMIN with an explicit assignment → that one.
   if (hasRole(user, "INVENTORY_ADMIN") && user.inventoryDept) {
     return user.inventoryDept;
   }
-  // Manager → their roster-mapped inventory dept, if any.
   const rosterLedDept = inventoryDeptForRosterLead(user);
   if (rosterLedDept) return rosterLedDept;
-  // Admin-tag roles whose name implies a dept.
-  if (hasRole(user, "SALES_ADMIN")) return "SALES";
-  if (hasRole(user, "TECH_ADMIN")) return "TECH_OPS";
-  // CCM_ADMIN — the inventory enum has CCM_TECH_OPS, closest match.
-  if (hasRole(user, "CCM_ADMIN")) return "CCM_TECH_OPS";
-  // FINANCIAL_ADMIN / INVENTORY_ADMIN-without-assignment / Super Admin
-  // / anyone else: no "primary" dept.
+  for (const [roleName, dept] of Object.entries(INVENTORY_HOME_DEPT_BY_ADMIN_ROLE)) {
+    if (hasRole(user, roleName as Parameters<typeof hasRole>[1])) return dept ?? null;
+  }
   return null;
 }
 
-/** READ access to a specific inventory department. Broader than EDIT —
- *  any of the five admin roles (MASTER_INVENTORY_READ_ROLES) can read
- *  every dept's master catalog, independent of dept-scoping. */
-export function canViewInventory(
-  user: User | null | undefined,
-  dept: InventoryDept,
-): boolean {
-  if (!user || user.status === "disabled") return false;
-  if (isSuperAdmin(user)) return true;
-  if (hasAnyRole(user, MASTER_INVENTORY_READ_ROLES)) return true;
-  // A user who can EDIT a dept also sees it — this covers a Manager
-  // whose roster-lead mapping gives them edit on their dept even
-  // though they don't hold any of the admin tags above.
-  return canEditInventoryDept(user, dept);
-}
-
+/** EDIT access to a specific inventory department. Rule 1 (roster lead)
+ *  or rule 2 (INVENTORY_ADMIN assignment). Super Admin bypass. */
 export function canEditInventoryDept(
   user: User | null | undefined,
   dept: InventoryDept,
@@ -116,30 +98,61 @@ export function canEditInventoryDept(
   if (!user || user.status === "disabled") return false;
   if (isSuperAdmin(user)) return true;
 
-  // Rule 2 — roster lead for the matching dept.
+  // Rule 1 — roster lead for the matching dept.
   if (inventoryDeptForRosterLead(user) === dept) return true;
 
-  // Rule 3 — explicit INVENTORY_ADMIN assignment.
+  // Rule 2 — explicit INVENTORY_ADMIN assignment.
   if (hasRole(user, "INVENTORY_ADMIN") && user.inventoryDept === dept) return true;
 
   return false;
 }
 
+/** READ access to a specific inventory department. Strict per-dept:
+ *  a user sees dept X iff they can edit X (rules 1 or 2) OR X is their
+ *  admin-role home dept (rule 3, view-only). Super Admin bypass. There
+ *  is no "broad read across all depts" tier — the previous
+ *  MASTER_INVENTORY_READ_ROLES grant was removed in the Nov 2026
+ *  strict-dept rewrite. */
+export function canViewInventory(
+  user: User | null | undefined,
+  dept: InventoryDept,
+): boolean {
+  if (!user || user.status === "disabled") return false;
+  if (isSuperAdmin(user)) return true;
+  if (canEditInventoryDept(user, dept)) return true;
+  // Rule 3 — admin-role home dept is view-only.
+  if (primaryInventoryDeptForUser(user) === dept) return true;
+  return false;
+}
+
+/** The authoritative department filter for a user — the complete set of
+ *  InventoryDepts this user is allowed to see. Primary consumer: query
+ *  layers that want an explicit `WHERE dept IN (...)` style filter rather
+ *  than filtering-after-fetch via canViewInventory. The UI also uses
+ *  this to constrain the dept-filter dropdown so a scoped user doesn't
+ *  see options they can't open.
+ *
+ *  Super Admin gets the full INVENTORY_DEPT_ORDER list. */
+export function visibleInventoryDeptsForUser(
+  user: User | null | undefined,
+): readonly InventoryDept[] {
+  if (!user || user.status === "disabled") return [];
+  if (isSuperAdmin(user)) return INVENTORY_DEPT_ORDER;
+  return INVENTORY_DEPT_ORDER.filter((dept) => canViewInventory(user, dept));
+}
+
 /** Convenience: is this user able to view at least one inventory dept?
- *  Used by page-level route guards and sidebar visibility. */
+ *  Used by page-level route guards — a zero-dept user is redirected
+ *  away from /inventory rather than shown an empty catalog. */
 export function canViewAnyInventoryDept(user: User | null | undefined): boolean {
   if (!user || user.status === "disabled") return false;
   if (isSuperAdmin(user)) return true;
-  // The five admin roles always see at least one dept (they see all).
-  if (hasAnyRole(user, MASTER_INVENTORY_READ_ROLES)) return true;
-  // Otherwise fall back to dept-by-dept edit check for anyone who has
-  // edit access somewhere via the roster-lead or inventory-dept rules.
-  return INVENTORY_DEPT_ORDER.some((dept) => canEditInventoryDept(user, dept));
+  return INVENTORY_DEPT_ORDER.some((dept) => canViewInventory(user, dept));
 }
 
 /** Convenience: is this user able to edit any inventory dept at all?
- *  NOTE this is NOT the same as canViewAnyInventoryDept any more — a
- *  SALES_ADMIN without a dept-edit rule has view-all but no edit. */
+ *  Narrower than canViewAnyInventoryDept — a user with only rule-3
+ *  admin-home access can view but not edit. */
 export function canEditAnyInventoryDept(user: User | null | undefined): boolean {
   if (!user || user.status === "disabled") return false;
   if (isSuperAdmin(user)) return true;
