@@ -173,8 +173,28 @@ export interface ShadowEventRecord {
    *  viewers. See GamesSelection type and
    *  /api/kotg/[bookingId]/games. */
   games?: GamesSelection;
+  /** Inventory-specific date range for THIS booking, overriding the
+   *  Sheet's StartDate/EndDate on inventory surfaces only. Set when a
+   *  department needs to reserve equipment outside the event's own
+   *  dates (e.g. day-before setup, day-after teardown). Absent/undefined
+   *  means "use the Sheet dates as-is"; the exports and the on-screen
+   *  inventory card both fall back to the Sheet dates in that case.
+   *  Does NOT change the event's own dates on the Sheet or anywhere
+   *  else in the app. Edit gated by canEditAnyInventoryDept. */
+  inventoryDates?: InventoryDateRange;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A booking's inventory-specific date range. Both fields optional so a
+ *  user can set just the start, just the end, or both independently.
+ *  Dates stored as YYYY-MM-DD strings to match what the browser's
+ *  <input type="date"> produces — no timezone round-trip needed. */
+export interface InventoryDateRange {
+  start?: string;
+  end?: string;
+  updatedAt?: string;
+  updatedByUserId?: string;
 }
 
 // ─── Authority Approval (Sales-owned, per-booking) ──────────────────────────

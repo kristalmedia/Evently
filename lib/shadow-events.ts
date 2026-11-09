@@ -2,6 +2,7 @@ import type {
   AuthorityApproval,
   DeptRoster,
   GamesSelection,
+  InventoryDateRange,
   ShadowDeptKey,
   ShadowEventEventlyStatus,
   ShadowEventRecord,
@@ -240,6 +241,29 @@ export function clearGamesSelection(
   return updateShadowEvent(bookingId, {
     games: {
       selectedGames: [],
+      updatedAt: new Date().toISOString(),
+      updatedByUserId: userId,
+    },
+  });
+}
+
+/** Wholesale-replace the inventory date-range override on this booking's
+ *  shadow record, stamping updatedAt/updatedByUserId. Pass an object
+ *  with empty strings / undefined for start/end to effectively clear
+ *  one or both bounds; the UI surfaces fall back to the Sheet's own
+ *  StartDate/EndDate for any empty bound. Caller owns the auth check. */
+export function setInventoryDates(
+  bookingId: string,
+  dates: Pick<InventoryDateRange, "start" | "end">,
+  userId: string,
+): ShadowEventRecord {
+  // Normalise blank strings to undefined so the stored shape stays clean.
+  const start = dates.start?.trim() || undefined;
+  const end = dates.end?.trim() || undefined;
+  return updateShadowEvent(bookingId, {
+    inventoryDates: {
+      start,
+      end,
       updatedAt: new Date().toISOString(),
       updatedByUserId: userId,
     },

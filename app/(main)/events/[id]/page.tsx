@@ -473,6 +473,7 @@ export default async function EventDetailPage({
           statusLabel={
             EVENT_STATUSES.find((s) => s.value === row.status)?.label ?? row.status
           }
+          initialInventoryDates={shadow.inventoryDates}
           items={inventoryItems}
           initialTicks={inventoryRecord.ticks}
         />

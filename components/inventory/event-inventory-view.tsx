@@ -92,6 +92,7 @@ export function EventInventoryView({
   startDate,
   endDate,
   statusLabel,
+  initialInventoryDates,
   items,
   initialTicks,
 }: {
@@ -100,12 +101,18 @@ export function EventInventoryView({
   clientName?: string;
   venue?: string;
   /** Event start/end from the Sales sheet — passed through verbatim to
-   *  the export so the PDF header + CSV columns carry real dates. */
+   *  the export so the PDF header + CSV columns carry real dates. These
+   *  are the FALLBACK; initialInventoryDates (if set) overrides them on
+   *  the inventory surface only. */
   startDate?: string;
   endDate?: string;
   /** UI-side event status label (e.g. "Upcoming", "Confirmed") passed
    *  through to the PDF header. */
   statusLabel?: string;
+  /** Inventory-specific date range from the shadow record. Both bounds
+   *  optional; empty bounds fall back to the Sheet dates. Edited on
+   *  this component via the Save button next to the two inputs. */
+  initialInventoryDates?: { start?: string; end?: string };
   items: CatalogItem[];
   initialTicks: Record<string, EventInventoryTick>;
 }) {
@@ -113,6 +120,25 @@ export function EventInventoryView({
   const currentUser = useSessionStore((s) => s.user);
   const [ticks, setTicks] = useState<Record<string, EventInventoryTick>>(initialTicks);
   const [busy, setBusy] = useState(false);
+
+  // Inventory-specific date range. Seeded from shadow if saved, else
+  // from the event's Sheet dates so the picker shows something sensible
+  // on first visit rather than blank fields. Editable by anyone with
+  // canEditAnyInventoryDept (server enforces identically).
+  const [invStart, setInvStart] = useState<string>(
+    () => initialInventoryDates?.start ?? startDate ?? "",
+  );
+  const [invEnd, setInvEnd] = useState<string>(
+    () => initialInventoryDates?.end ?? endDate ?? "",
+  );
+  const [savedInvStart, setSavedInvStart] = useState<string>(
+    () => initialInventoryDates?.start ?? "",
+  );
+  const [savedInvEnd, setSavedInvEnd] = useState<string>(
+    () => initialInventoryDates?.end ?? "",
+  );
+  const [savingDates, setSavingDates] = useState(false);
+  const datesDirty = invStart !== savedInvStart || invEnd !== savedInvEnd;
 
   // Default the filter to the user's primary inventory dept — a Tech
   // Admin lands on TECH_OPS, a Sales Admin on SALES, etc. Users with no
@@ -186,14 +212,50 @@ export function EventInventoryView({
     }
   }
 
+  async function saveInventoryDates() {
+    if (invStart && invEnd && invStart > invEnd) {
+      toast.error("Start date must be on or before end date.");
+      return;
+    }
+    setSavingDates(true);
+    try {
+      const res = await fetch(apiPath(`/api/inventory/event/${bookingId}/dates`), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ start: invStart || undefined, end: invEnd || undefined }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Failed to save dates");
+      }
+      const { inventoryDates } = (await res.json()) as {
+        inventoryDates?: { start?: string; end?: string };
+      };
+      setSavedInvStart(inventoryDates?.start ?? "");
+      setSavedInvEnd(inventoryDates?.end ?? "");
+      toast.success("Inventory dates saved", { position: "bottom-center" });
+      router.refresh();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSavingDates(false);
+    }
+  }
+
+  // Effective dates for the exports: use the inventory-specific
+  // override (last SAVED values, not the dirty draft) whenever either
+  // bound is set, falling back to the Sheet dates for any empty bound.
+  const effectiveStart = savedInvStart || startDate;
+  const effectiveEnd = savedInvEnd || endDate;
+
   function doExportCsv() {
     exportInventoryCsv({
       bookingId,
       displayTitle,
       clientName,
       venue,
-      startDate,
-      endDate,
+      startDate: effectiveStart,
+      endDate: effectiveEnd,
       statusLabel,
       items,
       ticks,
@@ -207,8 +269,8 @@ export function EventInventoryView({
         displayTitle,
         clientName,
         venue,
-        startDate,
-        endDate,
+        startDate: effectiveStart,
+        endDate: effectiveEnd,
         statusLabel,
         items,
         ticks,
@@ -281,6 +343,69 @@ export function EventInventoryView({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
+        {/* Inventory date range — defaults to the event's own Sheet
+            dates, overridable per booking if dept needs the equipment
+            reserved for a wider window (e.g. day-before setup). The
+            exports read these back via `effectiveStart` / `effectiveEnd`.
+            Edit is gated by canEditAnyInventoryDept server-side; the UI
+            disables the inputs for viewers who can't edit any dept. */}
+        <div className="rounded-md border p-3 flex flex-col sm:flex-row sm:items-end gap-3">
+          <div className="flex-1 space-y-1">
+            <label
+              htmlFor="inv-start-date"
+              className="text-[0.65rem] font-mono uppercase tracking-widest text-muted-foreground"
+            >
+              Inventory start date
+            </label>
+            <Input
+              id="inv-start-date"
+              type="date"
+              value={invStart}
+              onChange={(e) => setInvStart(e.target.value)}
+              disabled={!canEditAny || savingDates}
+              className="h-9"
+              aria-label="Inventory start date"
+            />
+          </div>
+          <div className="flex-1 space-y-1">
+            <label
+              htmlFor="inv-end-date"
+              className="text-[0.65rem] font-mono uppercase tracking-widest text-muted-foreground"
+            >
+              Inventory end date
+            </label>
+            <Input
+              id="inv-end-date"
+              type="date"
+              value={invEnd}
+              onChange={(e) => setInvEnd(e.target.value)}
+              disabled={!canEditAny || savingDates}
+              className="h-9"
+              aria-label="Inventory end date"
+            />
+          </div>
+          {canEditAny && (
+            <div className="shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={saveInventoryDates}
+                disabled={savingDates || !datesDirty}
+                className="gap-1.5 h-9"
+              >
+                <Save className="h-3.5 w-3.5" />
+                {savingDates ? "Saving…" : "Save dates"}
+              </Button>
+            </div>
+          )}
+        </div>
+        {!savedInvStart && !savedInvEnd && (startDate || endDate) && (
+          <div className="text-[0.7rem] text-muted-foreground -mt-3">
+            Defaults shown are the event&apos;s own dates from the Sales
+            sheet. Save to override for the inventory checklist only.
+          </div>
+        )}
+
         {/* Single-dept filter with zero items — show an empty state so
             the filter looks responsive rather than silently rendering
             nothing (which would read as broken UI). "All" view omits
