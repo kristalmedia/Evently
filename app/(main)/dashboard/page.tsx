@@ -44,19 +44,34 @@ export default async function DashboardPage() {
   }
   const rows = bookings.map(projectKotgBookingRow);
 
+  // Partition rows into the three tiles' buckets using the SAME
+  // predicates each one uses to populate itself, so Total = Completed +
+  // Ongoing + Upcoming always holds (cancelled bookings are already
+  // filtered out upstream via filterVisibleBookings). Previously
+  // "Ongoing" checked status === "ONGOING" — a status the KOTG
+  // projection never emits, so the tile was permanently 0; and
+  // "Upcoming" only counted the legacy UPCOMING/APPROVED statuses, so
+  // active bookings sitting in STAFFING_IN_PROGRESS / PUBLISHED fell
+  // through every bucket and silently disappeared from the summary.
+  const completed = rows.filter((r) => r.status === "COMPLETED");
+  const ongoing = rows.filter((r) => r.isLive);
+  const upcomingRows = rows.filter(
+    (r) => !r.isLive && r.status !== "COMPLETED",
+  );
   const counts = {
     total: rows.length,
-    upcoming: rows.filter((r) => r.status === "UPCOMING" || r.status === "APPROVED").length,
-    ongoing: rows.filter((r) => r.status === "ONGOING").length,
-    completed: rows.filter((r) => r.status === "COMPLETED").length,
+    upcoming: upcomingRows.length,
+    ongoing: ongoing.length,
+    completed: completed.length,
   };
 
-  const upcoming = rows
-    .filter((r) => ["UPCOMING", "APPROVED", "PENDING_APPROVAL"].includes(r.status))
+  // Timeline card below the tiles — same "future, not live, not done"
+  // definition as counts.upcoming, so the list and the number match.
+  const upcoming = [...upcomingRows]
     .sort((a, b) => +new Date(a.startDate) - +new Date(b.startDate))
     .slice(0, 5);
 
-  const live = rows.filter((r) => r.isLive);
+  const live = ongoing;
 
   const canCreate = can(user, "events.create");
 
