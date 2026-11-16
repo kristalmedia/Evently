@@ -41,8 +41,11 @@ const ROSTER_DEPT_TO_INVENTORY_DEPT: Partial<Record<string, InventoryDept>> = {
 
 /** Client-side mirror of canEditInventoryDept — see
  *  lib/inventory-permissions.ts for the authoritative server-side rule.
- *  Three-way union: Super Admin bypass, roster-lead-for-this-dept, or
- *  explicit INVENTORY_ADMIN assignment via User.inventoryDept. */
+ *  Three dept-grant rules (any one sufficient), plus Super Admin bypass:
+ *    1. Roster lead for the matching dept.
+ *    2. INVENTORY_ADMIN with User.inventoryDept === dept.
+ *    3. Admin role whose home inventory dept matches (SALES_ADMIN →
+ *       SALES_AND_EVENT, TECH_ADMIN → TECH_OPS, CCM_ADMIN → CCM_TECH_OPS). */
 function canEditDeptClient(
   user: ReturnType<typeof useSessionStore.getState>["user"],
   dept: InventoryDept,
@@ -56,6 +59,10 @@ function canEditDeptClient(
   }
 
   if (hasRole(user, "INVENTORY_ADMIN") && user.inventoryDept === dept) return true;
+
+  if (hasRole(user, "SALES_ADMIN") && dept === "SALES_AND_EVENT") return true;
+  if (hasRole(user, "TECH_ADMIN") && dept === "TECH_OPS") return true;
+  if (hasRole(user, "CCM_ADMIN") && dept === "CCM_TECH_OPS") return true;
 
   return false;
 }

@@ -21,8 +21,14 @@ import { hasRole, isSuperAdmin, rosterDeptKeyForDepartment } from "./permissions
  *      whose User.department maps to X via ROSTER_DEPT_TO_INVENTORY_DEPT.
  *   2. They hold INVENTORY_ADMIN AND User.inventoryDept === X.
  *   3. They hold an admin role whose "home" inventory dept is X:
- *      SALES_ADMIN → SALES, TECH_ADMIN → TECH_OPS, CCM_ADMIN → CCM_TECH_OPS.
- *      This tier is VIEW-only — edit still requires rule 1 or 2.
+ *      SALES_ADMIN → SALES_AND_EVENT, TECH_ADMIN → TECH_OPS,
+ *      CCM_ADMIN → CCM_TECH_OPS.
+ *
+ * View and edit grants are now EQUIVALENT: anyone in rules 1–3 for
+ * dept X can both see and modify X's catalog + per-event ticks. The
+ * earlier "rule 3 is view-only" caveat was lifted on request so admin-
+ * tag holders can tick their own dept's checklist without needing a
+ * separate roster-lead or INVENTORY_ADMIN assignment on top.
  *
  * Roles that match none of the above (VIEWER, HR, FINANCE_LEAD,
  * FINANCIAL_ADMIN, ROSTER_ADMIN, a plain MANAGER whose department has no
@@ -89,8 +95,28 @@ export function primaryInventoryDeptForUser(
   return null;
 }
 
-/** EDIT access to a specific inventory department. Rule 1 (roster lead)
- *  or rule 2 (INVENTORY_ADMIN assignment). Super Admin bypass. */
+/** Does this user hold an admin role whose home inventory dept is X?
+ *  Rule 3 of the dept grant (SALES_ADMIN → SALES_AND_EVENT, TECH_ADMIN
+ *  → TECH_OPS, CCM_ADMIN → CCM_TECH_OPS). Independent of the
+ *  INVENTORY_ADMIN assignment and the roster-lead mapping; checked on
+ *  top of both. */
+function adminHomeDeptGrants(
+  user: User | null | undefined,
+  dept: InventoryDept,
+): boolean {
+  if (!user) return false;
+  for (const [roleName, home] of Object.entries(INVENTORY_HOME_DEPT_BY_ADMIN_ROLE)) {
+    if (home !== dept) continue;
+    if (hasRole(user, roleName as Parameters<typeof hasRole>[1])) return true;
+  }
+  return false;
+}
+
+/** EDIT access to a specific inventory department. Any of the three
+ *  dept-grant rules (roster lead, INVENTORY_ADMIN assignment, or admin
+ *  role home dept) is sufficient; Super Admin bypass applies as usual.
+ *  View and edit grants are equivalent — if you can see dept X here,
+ *  you can modify X's catalog and ticks. */
 export function canEditInventoryDept(
   user: User | null | undefined,
   dept: InventoryDept,
@@ -104,25 +130,23 @@ export function canEditInventoryDept(
   // Rule 2 — explicit INVENTORY_ADMIN assignment.
   if (hasRole(user, "INVENTORY_ADMIN") && user.inventoryDept === dept) return true;
 
+  // Rule 3 — admin role whose home inventory dept matches.
+  if (adminHomeDeptGrants(user, dept)) return true;
+
   return false;
 }
 
-/** READ access to a specific inventory department. Strict per-dept:
- *  a user sees dept X iff they can edit X (rules 1 or 2) OR X is their
- *  admin-role home dept (rule 3, view-only). Super Admin bypass. There
- *  is no "broad read across all depts" tier — the previous
- *  MASTER_INVENTORY_READ_ROLES grant was removed in the Nov 2026
- *  strict-dept rewrite. */
+/** READ access to a specific inventory department. Identical to
+ *  canEditInventoryDept — view and edit grants are the same strict
+ *  per-dept set (Super Admin bypass applies). There is no "broad read
+ *  across all depts" tier — the previous MASTER_INVENTORY_READ_ROLES
+ *  grant was removed in the Nov 2026 strict-dept rewrite, and the
+ *  "admin home is view-only" asymmetry was lifted shortly after. */
 export function canViewInventory(
   user: User | null | undefined,
   dept: InventoryDept,
 ): boolean {
-  if (!user || user.status === "disabled") return false;
-  if (isSuperAdmin(user)) return true;
-  if (canEditInventoryDept(user, dept)) return true;
-  // Rule 3 — admin-role home dept is view-only.
-  if (primaryInventoryDeptForUser(user) === dept) return true;
-  return false;
+  return canEditInventoryDept(user, dept);
 }
 
 /** The authoritative department filter for a user — the complete set of

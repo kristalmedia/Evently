@@ -40,7 +40,11 @@ const ROSTER_DEPT_TO_INVENTORY_DEPT: Partial<Record<string, InventoryDept>> = {
 
 /** Client-side mirror of canEditInventoryDept — see
  *  components/inventory/catalog-view.tsx for the identical function.
- *  Server enforces this rule independently in /api/inventory/*. */
+ *  Server enforces this rule independently in /api/inventory/*.
+ *
+ *  Three dept-grant rules (any one is sufficient), plus Super Admin
+ *  bypass. Must stay in sync with the server-side rule in
+ *  lib/inventory-permissions.ts. */
 function canEditDeptClient(
   user: ReturnType<typeof useSessionStore.getState>["user"],
   dept: InventoryDept,
@@ -48,12 +52,19 @@ function canEditDeptClient(
   if (!user || user.status === "disabled") return false;
   if (isSuperAdmin(user)) return true;
 
+  // Rule 1 — roster lead for the matching dept.
   if (hasRole(user, "MANAGER")) {
     const rosterKey = rosterDeptKeyForDepartment(user.department);
     if (rosterKey && ROSTER_DEPT_TO_INVENTORY_DEPT[rosterKey] === dept) return true;
   }
 
+  // Rule 2 — explicit INVENTORY_ADMIN assignment.
   if (hasRole(user, "INVENTORY_ADMIN") && user.inventoryDept === dept) return true;
+
+  // Rule 3 — admin role home dept.
+  if (hasRole(user, "SALES_ADMIN") && dept === "SALES_AND_EVENT") return true;
+  if (hasRole(user, "TECH_ADMIN") && dept === "TECH_OPS") return true;
+  if (hasRole(user, "CCM_ADMIN") && dept === "CCM_TECH_OPS") return true;
 
   return false;
 }
