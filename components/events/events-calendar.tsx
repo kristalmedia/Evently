@@ -19,6 +19,7 @@ import {
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { CATEGORY_COLOR, CATEGORY_COLOR_UNSET, DEFAULT_CATEGORIES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { fullCalendarEnd } from "@/lib/kotg-projection";
 import type { EventStatus } from "@/lib/types";
 
 interface CalendarItem {
@@ -180,7 +181,12 @@ export function EventsCalendar({ events }: { events: CalendarItem[] }) {
                 id: e.id,
                 title: e.title,
                 start: e.start,
-                end: e.end,
+                // Shift the Sheet's inclusive end to FullCalendar's
+                // exclusive-next-day form, so a multi-day event renders
+                // on every day in its span (including the final day,
+                // which used to drop off). See lib/kotg-projection.ts.
+                end: fullCalendarEnd(e.start, e.end),
+                allDay: true,
                 backgroundColor: color,
                 borderColor: color,
                 textColor: readableTextColor(color),

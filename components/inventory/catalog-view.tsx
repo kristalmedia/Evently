@@ -35,7 +35,7 @@ import { hasRole, isSuperAdmin, rosterDeptKeyForDepartment } from "@/lib/permiss
  *  ROSTER_DEPT_TO_INVENTORY_DEPT in lib/inventory-permissions.ts. */
 const ROSTER_DEPT_TO_INVENTORY_DEPT: Partial<Record<string, InventoryDept>> = {
   IT: "IT",
-  SALES: "SALES",
+  SALES: "SALES_AND_EVENT",
   TECH: "TECH_OPS",
 };
 
@@ -100,8 +100,7 @@ export function InventoryCatalogView({ items }: { items: CatalogItem[] }) {
   const currentUser = useSessionStore((s) => s.user);
   const [busy, setBusy] = useState(false);
   const [newItemNames, setNewItemNames] = useState<Record<InventoryDept, string>>({
-    EVENTS: "",
-    SALES: "",
+    SALES_AND_EVENT: "",
     TECH_OPS: "",
     CCM_TECH_OPS: "",
     IT: "",

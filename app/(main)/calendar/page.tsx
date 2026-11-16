@@ -51,6 +51,7 @@ export default async function CalendarPage() {
       status: mapKotgBookingToEventStatus(
         b.booking.Status,
         getShadowEvent(b.booking.BookingID)?.eventlyStatus,
+        b.booking.EndDate,
       ),
       category: inferKotgCategory(b),
       venue: b.booking.LocationDetails || undefined,

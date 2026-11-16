@@ -13,7 +13,15 @@ import type { CatalogItem, InventoryDept } from "./inventory-types";
  */
 
 const SEED: Record<InventoryDept, string[]> = {
-  EVENTS: [
+  // Previously two separate checklists — "Sales" and "Events" — merged
+  // Nov 2026 into one shared tracking array under "Sales & Event", kept
+  // in the original order (Events items first, then Sales items) so the
+  // ops team sees the same ordering they already used on paper. The
+  // seed slug (sales_and_event) means ids are new; prior "inv_events_*"
+  // and "inv_sales_*" tick records become orphans on next read, which
+  // is harmless because the store rebuilds from seed on PM2 restart
+  // anyway (per-event tick state is already process-lifetime).
+  SALES_AND_EVENT: [
     "Backdrop",
     "Stand banner",
     "Healing chairs",
@@ -32,8 +40,6 @@ const SEED: Record<InventoryDept, string[]> = {
     "Internet data (RX)",
     "Internet data (Live Stream)",
     "Internet data (Sales)",
-  ],
-  SALES: [
     "Official Receipt",
     "Company Chop",
     "Payment Display",
@@ -90,8 +96,7 @@ const SEED: Record<InventoryDept, string[]> = {
 };
 
 const DEPT_SLUG: Record<InventoryDept, string> = {
-  EVENTS: "events",
-  SALES: "sales",
+  SALES_AND_EVENT: "sales_and_event",
   TECH_OPS: "techops",
   CCM_TECH_OPS: "ccmtechops",
   IT: "it",

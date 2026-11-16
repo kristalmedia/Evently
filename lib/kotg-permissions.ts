@@ -14,12 +14,12 @@ import { MANAGER_DEPT_KEYS } from "./shadow-events";
  *  maps an InventoryAdmin's User.inventoryDept to the ShadowDeptKey they
  *  should be dept-scoped to on the roster side. Only the four inventory
  *  depts that have a corresponding roster block appear here —
- *  EVENTS/OTHERS have no roster counterpart, so an InventoryAdmin
- *  assigned to those gets zero roster access (same "no clean match"
- *  outcome as a Manager whose dept doesn't map, e.g. General Manager). */
+ *  OTHERS has no roster counterpart, so an InventoryAdmin assigned there
+ *  gets zero roster access (same "no clean match" outcome as a Manager
+ *  whose dept doesn't map, e.g. General Manager). */
 const INVENTORY_DEPT_TO_SHADOW_DEPT: Partial<Record<InventoryDept, ShadowDeptKey>> = {
   IT: "IT",
-  SALES: "SALES",
+  SALES_AND_EVENT: "SALES",
   TECH_OPS: "TECH",
   CCM_TECH_OPS: "CCM",
 };

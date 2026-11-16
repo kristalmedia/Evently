@@ -109,7 +109,11 @@ export default async function EventDetailPage({
   const row = projectKotgBookingRow(kotg);
   const showBudget = canViewBudget(user);
   const budget = sumShadowBudget(shadow);
-  const status = mapKotgBookingToEventStatus(kotg.booking.Status, shadow.eventlyStatus);
+  const status = mapKotgBookingToEventStatus(
+    kotg.booking.Status,
+    shadow.eventlyStatus,
+    kotg.booking.EndDate,
+  );
 
   // Flat cross-dept roster for the HR editor — every slot from every
   // dept, with the staff user resolved server-side so the client can

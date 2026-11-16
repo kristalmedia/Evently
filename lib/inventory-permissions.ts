@@ -33,14 +33,14 @@ import { hasRole, isSuperAdmin, rosterDeptKeyForDepartment } from "./permissions
 
 /** Maps the roster-side ShadowDeptKey the user leads (derived from
  *  User.department via rosterDeptKeyForDepartment) to the InventoryDept
- *  they get access to under the roster-lead rule. Only three depts have
- *  a clean 1:1 match. Entries NOT in this table (FINANCE, CCM — the
- *  roster depts without a matching inventory section) correctly yield
+ *  they get access to under the roster-lead rule. The SALES roster
+ *  lead gets SALES_AND_EVENT (the merged Sales & Event inventory
+ *  section). Entries NOT in this table (FINANCE, CCM) correctly yield
  *  "no roster-lead inventory access" since the inventory feature
  *  doesn't have a corresponding dept at all. */
 const ROSTER_DEPT_TO_INVENTORY_DEPT: Partial<Record<string, InventoryDept>> = {
   IT: "IT",
-  SALES: "SALES",
+  SALES: "SALES_AND_EVENT",
   TECH: "TECH_OPS",
 };
 
@@ -64,7 +64,7 @@ export function inventoryDeptForRosterLead(
  *  FINANCIAL_ADMIN, which has no corresponding inventory section)
  *  contributes no inventory access by its tag alone. */
 const INVENTORY_HOME_DEPT_BY_ADMIN_ROLE: Partial<Record<string, InventoryDept>> = {
-  SALES_ADMIN: "SALES",
+  SALES_ADMIN: "SALES_AND_EVENT",
   TECH_ADMIN: "TECH_OPS",
   CCM_ADMIN: "CCM_TECH_OPS",
 };

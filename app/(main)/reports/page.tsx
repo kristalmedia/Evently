@@ -37,7 +37,11 @@ export default async function ReportsPage() {
   // there's no more Section-5-staff / Section-6-costs to sum from.
   const rows: ReportRow[] = bookings.map((b) => {
     const shadow = getShadowEvent(b.booking.BookingID);
-    const status = mapKotgBookingToEventStatus(b.booking.Status, shadow?.eventlyStatus);
+    const status = mapKotgBookingToEventStatus(
+      b.booking.Status,
+      shadow?.eventlyStatus,
+      b.booking.EndDate,
+    );
     // Attendance headcount lives on none of the new records — the Sheet
     // doesn't carry it and the shadow store's minimum viable slice omits
     // debrief-time counters. Left null pending a future Debrief-on-shadow

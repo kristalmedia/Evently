@@ -110,13 +110,36 @@ export function hasScheduledDate(booking: KotgBookingWithClient): boolean {
   return normalizeSheetDate(booking.booking.StartDate) !== null;
 }
 
+/** Is the given raw Sheet end-date string strictly in the past (i.e.
+ *  the whole day has elapsed as of `now`)? Treats the end date as
+ *  inclusive — the event's last day isn't "past" until the clock rolls
+ *  over to the next local day. Returns false for a missing/unparseable
+ *  date so a booking without a clean end date never auto-completes. */
+export function isEndDateInPast(
+  rawEndDate: string | undefined,
+  now: number = Date.now(),
+): boolean {
+  const normalized = normalizeSheetDate(rawEndDate ?? "");
+  if (!normalized) return false;
+  // End-of-day local time for the stored date — the "last moment" of
+  // the event's end day. now > that → the event is done.
+  const endOfDay = new Date(`${normalized}T23:59:59.999`).getTime();
+  if (Number.isNaN(endOfDay)) return false;
+  return now > endOfDay;
+}
+
 /** Derives the UI EventStatus from the pair (Sheet booking status, Evently
- *  shadow.eventlyStatus). Called for every row every render, so kept as a
- *  pure lookup with no side effects.
+ *  shadow.eventlyStatus), plus an optional end date for the auto-complete
+ *  pass. Called for every row every render, so kept as a pure lookup with
+ *  no side effects.
  *
  *  Logic:
  *    - Sheet says Cancelled → CANCELLED
  *    - Sheet says Completed → COMPLETED
+ *    - End date has passed (and not cancelled) → COMPLETED (auto-complete
+ *      pass; see isEndDateInPast). Keeps the dashboard in sync with real
+ *      calendar time without requiring Sales to manually flip the Sheet's
+ *      Status column on every finished booking.
  *    - Sheet Active + shadow eventlyStatus determines the Evently internal stage:
  *        ACTIVE / MANAGERS_IN_PROGRESS → STAFFING_IN_PROGRESS
  *        HR_UNLOCKED / FINANCE_UNLOCKED → FINANCIAL_REVIEW
@@ -129,10 +152,19 @@ export function hasScheduledDate(booking: KotgBookingWithClient): boolean {
 export function mapKotgBookingToEventStatus(
   sheetStatus: string,
   eventlyStatus: ShadowEventEventlyStatus | undefined,
+  rawEndDate?: string,
 ): EventStatus {
   const s = sheetStatus.trim().toLowerCase();
   if (s === "cancelled" || s === "canceled") return "CANCELLED";
   if (s === "completed") return "COMPLETED";
+
+  // Auto-complete: any non-cancelled booking whose end date has passed
+  // is reported as COMPLETED regardless of what the Sheet's Status cell
+  // still says. Sales sometimes forgets to flip "Active" → "Completed"
+  // after the event ends; the dashboard needs to reflect real calendar
+  // time, not the stale cell.
+  if (isEndDateInPast(rawEndDate)) return "COMPLETED";
+
   if (s !== "active") return "UPCOMING";
 
   switch (eventlyStatus) {
@@ -192,6 +224,7 @@ export function projectKotgBookingRow(
   const status = mapKotgBookingToEventStatus(
     booking.booking.Status,
     shadow?.eventlyStatus,
+    booking.booking.EndDate,
   );
   const now = Date.now();
   // Same day-first-date pitfall as projectKotgCalendarItem — go through
@@ -250,17 +283,51 @@ export function projectKotgCalendarItem(
   // fallback to the raw string is just so a caller that skips that
   // filter doesn't get `start: undefined` handed to FullCalendar.
   const start = normalizeSheetDate(booking.booking.StartDate) ?? booking.booking.StartDate;
+  // Keep `end` as the Sheet's inclusive end-date. The FullCalendar
+  // exclusive-end shift happens at the event-construction boundary in
+  // the EventsCalendar component (see fullCalendarEnd below) so the
+  // hover popover / day modal still see the real last day.
   const end = normalizeSheetDate(booking.booking.EndDate) ?? undefined;
   return {
     id: booking.booking.BookingID,
     title: kotgDisplayTitle(booking),
     start,
     end,
-    status: mapKotgBookingToEventStatus(booking.booking.Status, shadow?.eventlyStatus),
+    status: mapKotgBookingToEventStatus(
+      booking.booking.Status,
+      shadow?.eventlyStatus,
+      booking.booking.EndDate,
+    ),
     category: inferKotgCategory(booking),
     description: booking.booking.Notes || undefined,
     venue: booking.booking.LocationDetails || undefined,
   };
+}
+
+/** Advance a YYYY-MM-DD date by one calendar day. Used to translate the
+ *  Sheet's inclusive end-date convention into the exclusive-next-day
+ *  form FullCalendar's all-day events expect. Works in UTC because the
+ *  input is a bare date string (no timezone offset on record), so we
+ *  round-trip through UTC getters to avoid a DST or tz-boundary shift. */
+export function addOneDayISO(ymd: string): string {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return ymd;
+  d.setUTCDate(d.getUTCDate() + 1);
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+}
+
+/** The FullCalendar-ready end value for a calendar item — the Sheet's
+ *  inclusive end + 1 day for multi-day events (so every day in the
+ *  span renders explicitly), or undefined for a single-day/no-end
+ *  event (FullCalendar renders the single day without the shift).
+ *  Consumed by the EventsCalendar component. */
+export function fullCalendarEnd(
+  start: string | undefined,
+  end: string | undefined,
+): string | undefined {
+  if (!end || !start) return undefined;
+  if (end <= start) return undefined;
+  return addOneDayISO(end);
 }
 
 /** Sums the HR + Finance shadow lines for one booking. Used by the

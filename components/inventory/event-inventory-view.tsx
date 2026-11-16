@@ -30,10 +30,11 @@ import { hasRole, isSuperAdmin, rosterDeptKeyForDepartment } from "@/lib/permiss
 /** Must match ROSTER_DEPT_TO_INVENTORY_DEPT in
  *  lib/inventory-permissions.ts — the mapping from the roster-side
  *  ShadowDeptKey the user leads to the InventoryDept they get access to
- *  under the roster-lead rule. */
+ *  under the roster-lead rule. SALES roster-lead → SALES_AND_EVENT
+ *  inventory section (Sales and Events were merged Nov 2026). */
 const ROSTER_DEPT_TO_INVENTORY_DEPT: Partial<Record<string, InventoryDept>> = {
   IT: "IT",
-  SALES: "SALES",
+  SALES: "SALES_AND_EVENT",
   TECH: "TECH_OPS",
 };
 
@@ -75,7 +76,7 @@ function primaryDeptForUserClient(
       return ROSTER_DEPT_TO_INVENTORY_DEPT[rosterKey] ?? null;
     }
   }
-  if (hasRole(user, "SALES_ADMIN")) return "SALES";
+  if (hasRole(user, "SALES_ADMIN")) return "SALES_AND_EVENT";
   if (hasRole(user, "TECH_ADMIN")) return "TECH_OPS";
   if (hasRole(user, "CCM_ADMIN")) return "CCM_TECH_OPS";
   return null;

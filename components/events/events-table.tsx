@@ -218,7 +218,14 @@ export function EventsTable({ rows }: { rows: EventListRow[] }) {
                     {row.organizer}
                   </TableCell>
                   <TableCell className="text-sm">
-                    {formatDate(row.startDate)}
+                    {/* Multi-day bookings still render as ONE row — we
+                        just surface the full span here so it reads as a
+                        single multi-day event rather than looking like
+                        a single-day one. Falls back to the start date
+                        alone for single-day events. */}
+                    {row.endDate && row.endDate !== row.startDate
+                      ? `${formatDate(row.startDate)} → ${formatDate(row.endDate)}`
+                      : formatDate(row.startDate)}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={row.status} />

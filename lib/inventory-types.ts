@@ -21,8 +21,7 @@
  */
 
 export type InventoryDept =
-  | "EVENTS"
-  | "SALES"
+  | "SALES_AND_EVENT"
   | "TECH_OPS"
   | "CCM_TECH_OPS"
   | "IT"
@@ -31,8 +30,7 @@ export type InventoryDept =
 /** Human-readable label per InventoryDept — the exact wording used across
  *  every UI surface (page headings, section titles, admin picker). */
 export const INVENTORY_DEPT_LABEL: Record<InventoryDept, string> = {
-  EVENTS: "Events",
-  SALES: "Sales",
+  SALES_AND_EVENT: "Sales & Event",
   TECH_OPS: "Tech Ops",
   CCM_TECH_OPS: "CCM x Tech Ops",
   IT: "IT",
@@ -41,10 +39,11 @@ export const INVENTORY_DEPT_LABEL: Record<InventoryDept, string> = {
 
 /** Iteration order for the UI (top to bottom on the /inventory page and
  *  on the per-event checklist). Matches the order in the source
- *  spreadsheet the seed data comes from. */
+ *  spreadsheet the seed data comes from. SALES_AND_EVENT is the merged
+ *  section (the two previously-separate "Sales" and "Events" checklists
+ *  are now one shared tracking array under this single dept). */
 export const INVENTORY_DEPT_ORDER: readonly InventoryDept[] = [
-  "EVENTS",
-  "SALES",
+  "SALES_AND_EVENT",
   "TECH_OPS",
   "CCM_TECH_OPS",
   "IT",
