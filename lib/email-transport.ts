@@ -258,12 +258,28 @@ async function deliverViaSmtp(
 
 // ─── Public API ──────────────────────────────────────────────────────
 
-/** Diagnostic — which transport (if any) is currently configured. */
+/** Kill-switch for outbound email. Set EMAIL_NOTIFICATIONS_ENABLED=0
+ *  (or "false") in the environment to pause every send without touching
+ *  the Graph/SMTP transport config. Removing the var (or setting it to
+ *  anything else) resumes delivery immediately on the next request;
+ *  no code change needed. Honoured by deliverMail and surfaced by
+ *  transportStatus so the diagnostic is unambiguous. */
+function emailNotificationsPaused(): boolean {
+  const v = (process.env.EMAIL_NOTIFICATIONS_ENABLED ?? "").trim().toLowerCase();
+  return v === "0" || v === "false" || v === "off" || v === "no";
+}
+
+/** Diagnostic — which transport (if any) is currently configured, plus
+ *  whether the kill-switch is on. A paused state reports configured:false
+ *  so the UI's "email not configured" fallback kicks in uniformly. */
 export function transportStatus(): {
   configured: boolean;
-  transport: "graph" | "smtp" | "none";
+  transport: "graph" | "smtp" | "none" | "paused";
   missing: string[];
 } {
+  if (emailNotificationsPaused()) {
+    return { configured: false, transport: "paused", missing: [] };
+  }
   const graph = readGraphConfig();
   if (graph) {
     return { configured: true, transport: "graph", missing: [] };
@@ -288,6 +304,21 @@ export function transportStatus(): {
 }
 
 export async function deliverMail(input: MailInput): Promise<MailResult> {
+  // Kill-switch first — short-circuits before we even read transport
+  // config, so a paused deploy doesn't accidentally burn Graph tokens.
+  // Reports as simulated so every downstream caller (invite resend's
+  // manual-URL fallback, event-notifications' audit log) stays on the
+  // same "not sent" code path they already use for an unconfigured
+  // transport, instead of surfacing a hard failure.
+  if (emailNotificationsPaused()) {
+    return {
+      ok: false,
+      simulated: true,
+      error:
+        "Email notifications are paused (EMAIL_NOTIFICATIONS_ENABLED=0). Remove the env var or set it to 1 to resume delivery.",
+    };
+  }
+
   const graph = readGraphConfig();
   if (graph) return deliverViaGraph(graph, input);
 
