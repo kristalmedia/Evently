@@ -29,9 +29,18 @@ import type { EventListRow, EventStatus } from "@/lib/types";
 
 type SortKey = "title" | "startDate" | "status" | "priority";
 
+/** Status filter value. "RECENT" is the default — hides COMPLETED
+ *  events so the list reads as "what's still on the schedule." "ALL"
+ *  shows everything including completed; selecting "COMPLETED"
+ *  explicitly also still works. */
+type StatusFilter = EventStatus | "ALL" | "RECENT";
+
 export function EventsTable({ rows }: { rows: EventListRow[] }) {
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState<EventStatus | "ALL">("ALL");
+  // Default: hide past/completed events. The user asked for "recent
+  // events only" in the /events list, so RECENT is the opening state;
+  // switching to ALL or to COMPLETED explicitly surfaces the archive.
+  const [status, setStatus] = useState<StatusFilter>("RECENT");
   /** Month filter: "ALL" or "YYYY-MM". */
   const [month, setMonth] = useState<string>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("startDate");
@@ -52,7 +61,8 @@ export function EventsTable({ rows }: { rows: EventListRow[] }) {
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
     let list = rows;
-    if (status !== "ALL") list = list.filter((r) => r.status === status);
+    if (status === "RECENT") list = list.filter((r) => r.status !== "COMPLETED");
+    else if (status !== "ALL") list = list.filter((r) => r.status === status);
     if (month !== "ALL") {
       list = list.filter((r) => {
         if (!r.startDate) return false;
@@ -104,11 +114,16 @@ export function EventsTable({ rows }: { rows: EventListRow[] }) {
             onChange={(e) => setQ(e.target.value)}
           />
         </div>
-        <Select value={status} onValueChange={(v) => setStatus(v as EventStatus | "ALL")}>
+        <Select value={status} onValueChange={(v) => setStatus(v as StatusFilter)}>
           <SelectTrigger className="w-full sm:w-[200px]">
             <SelectValue placeholder="Filter status" />
           </SelectTrigger>
           <SelectContent>
+            {/* Recent (default): everything except COMPLETED. Matches
+                how most users read the Events list — "what's still on
+                the schedule," not the archive. All statuses / Completed
+                are one click away. */}
+            <SelectItem value="RECENT">Recent (default)</SelectItem>
             <SelectItem value="ALL">All statuses</SelectItem>
             {/* Cancelled bookings are filtered upstream — hiding the
                 filter option too so nobody wonders where their filter
