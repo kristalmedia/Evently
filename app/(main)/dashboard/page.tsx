@@ -20,7 +20,7 @@ import { getKotgBookingsWithClients } from "@/lib/google-sheets";
 import { reconcileKotgBookings } from "@/lib/kotg-sync";
 import {
   filterVisibleBookings,
-  projectKotgBookingRow,
+  projectGroupedBookingRows,
 } from "@/lib/kotg-projection";
 import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
 
@@ -42,7 +42,11 @@ export default async function DashboardPage() {
     // are the ones equipped to notice/fix a broken service account.
     bookings = [];
   }
-  const rows = bookings.map(projectKotgBookingRow);
+  // Grouped projection so the dashboard's counts match the /events list
+  // one-for-one — otherwise a two-booking event would inflate Total by
+  // one and drag the arithmetic for Completed/Ongoing/Upcoming out of
+  // sync with what the user sees in the list.
+  const rows = projectGroupedBookingRows(bookings);
 
   // Partition rows into the three tiles' buckets using the SAME
   // predicates each one uses to populate itself, so Total = Completed +

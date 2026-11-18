@@ -7,7 +7,7 @@ import { getKotgBookingsWithClients } from "@/lib/google-sheets";
 import { reconcileKotgBookings } from "@/lib/kotg-sync";
 import {
   filterVisibleBookings,
-  projectKotgBookingRow,
+  projectGroupedBookingRows,
 } from "@/lib/kotg-projection";
 import type { KotgBookingWithClient } from "@/lib/google-sheets-types";
 
@@ -25,7 +25,12 @@ export default async function EventsPage() {
   } catch {
     bookings = [];
   }
-  const rows = bookings.map(projectKotgBookingRow);
+  // Grouped projection: Sales occasionally creates several Sheet
+  // bookings for a single logical event (e.g. one per day of a
+  // multi-day run). Collapse them into one list row keyed on the
+  // display title so the Events list reads as "one event per card,"
+  // not "one Sheet row per card." See projectGroupedBookingRows.
+  const rows = projectGroupedBookingRows(bookings);
 
   return (
     <div className="space-y-6">

@@ -330,6 +330,122 @@ export function fullCalendarEnd(
   return addOneDayISO(end);
 }
 
+/** Group key for merging bookings into a single dashboard event — the
+ *  display title, lowercased and whitespace-collapsed. A single
+ *  "EventID" column doesn't exist on the Sheet yet, so until Sales
+ *  adds one upstream this is the stable proxy: bookings that Sales has
+ *  given the same customer-facing name belong to the same event. When
+ *  that column lands, swap this to read `booking.EventID` (with a
+ *  fallback to the title for legacy rows) and the merge pipeline below
+ *  keeps working unchanged. */
+export function eventGroupKey(booking: KotgBookingWithClient): string {
+  return kotgDisplayTitle(booking).trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Group a list of bookings into clusters that represent the same event.
+ *  Order within each cluster is preserved from the input so the caller
+ *  can rely on it (the UI rules below pick the earliest-start booking
+ *  as the "representative" after an explicit sort). Order of clusters
+ *  mirrors the FIRST appearance of each key in the input. */
+export function groupBookingsByEvent(
+  bookings: readonly KotgBookingWithClient[],
+): KotgBookingWithClient[][] {
+  const groups = new Map<string, KotgBookingWithClient[]>();
+  for (const b of bookings) {
+    const key = eventGroupKey(b);
+    const arr = groups.get(key);
+    if (arr) arr.push(b);
+    else groups.set(key, [b]);
+  }
+  return Array.from(groups.values());
+}
+
+/** Project a group of bookings (1..N) into a single EventListRow — one
+ *  row per logical event even when Sales created several bookings for
+ *  it. Merging rules, aimed at making the row read truthfully whichever
+ *  booking the viewer thinks of as "the event":
+ *
+ *    - id: the earliest-start booking's id, so /events/[id] opens the
+ *      first day of the series.
+ *    - startDate / endDate: min(start) and max(end) across the group,
+ *      so the span reads as the full event range.
+ *    - status: COMPLETED iff every booking is COMPLETED; otherwise
+ *      prefer in-progress states (STAFFING_IN_PROGRESS / PUBLISHED)
+ *      over UPCOMING. Mirrors "the event is only over once the last
+ *      day is over."
+ *    - isLive: true if ANY booking in the group is live right now.
+ *    - refNo / venue / organizer / category: taken from the
+ *      earliest-start booking. When bookings differ on venue or
+ *      organizer (which should be rare), the representative's values
+ *      are canonical — same way Sales treats the first-booked day as
+ *      the anchor.
+ *
+ *  For a single-booking group, the result matches projectKotgBookingRow
+ *  exactly so no downstream code needs to care about the grouping. */
+export function projectGroupedKotgBookingRow(
+  group: readonly KotgBookingWithClient[],
+): EventListRow {
+  if (group.length === 0) {
+    throw new Error("projectGroupedKotgBookingRow called with empty group");
+  }
+  // Pick the representative booking — the one Sales dated earliest.
+  // Bookings without a parseable start date sort last so a "TBC" row
+  // never masks a dated one as the anchor.
+  const sorted = [...group].sort((a, b) => {
+    const as = normalizeSheetDate(a.booking.StartDate);
+    const bs = normalizeSheetDate(b.booking.StartDate);
+    if (as && bs) return as.localeCompare(bs);
+    if (as) return -1;
+    if (bs) return 1;
+    return 0;
+  });
+  const rep = sorted[0];
+  const repRow = projectKotgBookingRow(rep);
+  if (group.length === 1) return repRow;
+
+  // Span: earliest start, latest end.
+  let minStart = normalizeSheetDate(rep.booking.StartDate) ?? "";
+  let maxEnd = normalizeSheetDate(rep.booking.EndDate) ?? minStart;
+  for (const b of group) {
+    const s = normalizeSheetDate(b.booking.StartDate);
+    const e = normalizeSheetDate(b.booking.EndDate) ?? s;
+    if (s && (!minStart || s < minStart)) minStart = s;
+    if (e && (!maxEnd || e > maxEnd)) maxEnd = e;
+  }
+
+  // Aggregate status across the group.
+  const rows = group.map(projectKotgBookingRow);
+  const allCompleted = rows.every((r) => r.status === "COMPLETED");
+  const anyLive = rows.some((r) => r.isLive);
+  const inProgress = rows.find(
+    (r) => r.status === "STAFFING_IN_PROGRESS" || r.status === "PUBLISHED",
+  );
+  let status: EventStatus;
+  if (allCompleted) status = "COMPLETED";
+  else if (anyLive) status = inProgress?.status ?? repRow.status;
+  else if (inProgress) status = inProgress.status;
+  else status = repRow.status;
+
+  return {
+    ...repRow,
+    startDate: minStart || repRow.startDate,
+    endDate: maxEnd || repRow.endDate,
+    status,
+    isLive: anyLive,
+  };
+}
+
+/** Convenience: full pipeline — filter out cancelled, group, and
+ *  project each group into an EventListRow. Replaces the previous
+ *  `bookings.map(projectKotgBookingRow)` call on the /events and
+ *  dashboard pages so the two views always agree on the grouped
+ *  event count. */
+export function projectGroupedBookingRows(
+  bookings: readonly KotgBookingWithClient[],
+): EventListRow[] {
+  return groupBookingsByEvent(bookings).map(projectGroupedKotgBookingRow);
+}
+
 /** Sums the HR + Finance shadow lines for one booking. Used by the
  *  dashboard budget rollup and the reports page's cost columns.
  *  Returns zeroes when no shadow record exists yet. */
