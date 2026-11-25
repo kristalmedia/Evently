@@ -37,7 +37,7 @@ export default async function EventsPage() {
       <PageHeader
         eyebrow="Event Management"
         title="Events"
-        description="Every KOTG booking from the Sales sheet. Filter by status, category, or search by name or reference."
+        description="Every booking from ServiceBookings. Default view shows ongoing events (End Date >= today); switch to All statuses or Completed to see past events."
       />
 
       {rows.length === 0 ? (

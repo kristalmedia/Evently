@@ -29,18 +29,22 @@ import type { EventListRow, EventStatus } from "@/lib/types";
 
 type SortKey = "title" | "startDate" | "status" | "priority";
 
-/** Status filter value. "RECENT" is the default — hides COMPLETED
- *  events so the list reads as "what's still on the schedule." "ALL"
- *  shows everything including completed; selecting "COMPLETED"
- *  explicitly also still works. */
-type StatusFilter = EventStatus | "ALL" | "RECENT";
+/** Status filter value. "ONGOING" is the default — hides COMPLETED
+ *  events so the list reads as "what's still on the schedule" (any
+ *  booking whose end date hasn't passed yet, since the auto-complete
+ *  pass stamps past-end bookings COMPLETED). "ALL" shows everything
+ *  including completed; selecting "COMPLETED" explicitly surfaces
+ *  the archive. Formerly called "RECENT" — renamed Nov 2026 so the
+ *  label matches what it does (End Date >= today). */
+type StatusFilter = EventStatus | "ALL" | "ONGOING";
 
 export function EventsTable({ rows }: { rows: EventListRow[] }) {
   const [q, setQ] = useState("");
-  // Default: hide past/completed events. The user asked for "recent
-  // events only" in the /events list, so RECENT is the opening state;
-  // switching to ALL or to COMPLETED explicitly surfaces the archive.
-  const [status, setStatus] = useState<StatusFilter>("RECENT");
+  // Default: hide past/completed events. End-date-in-past bookings
+  // have already been stamped COMPLETED by mapKotgBookingToEventStatus,
+  // so filtering !COMPLETED here is equivalent to "End Date >= today".
+  // Switching to ALL or to COMPLETED explicitly surfaces the archive.
+  const [status, setStatus] = useState<StatusFilter>("ONGOING");
   /** Month filter: "ALL" or "YYYY-MM". */
   const [month, setMonth] = useState<string>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("startDate");
@@ -61,7 +65,7 @@ export function EventsTable({ rows }: { rows: EventListRow[] }) {
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
     let list = rows;
-    if (status === "RECENT") list = list.filter((r) => r.status !== "COMPLETED");
+    if (status === "ONGOING") list = list.filter((r) => r.status !== "COMPLETED");
     else if (status !== "ALL") list = list.filter((r) => r.status === status);
     if (month !== "ALL") {
       list = list.filter((r) => {
@@ -119,11 +123,13 @@ export function EventsTable({ rows }: { rows: EventListRow[] }) {
             <SelectValue placeholder="Filter status" />
           </SelectTrigger>
           <SelectContent>
-            {/* Recent (default): everything except COMPLETED. Matches
-                how most users read the Events list — "what's still on
-                the schedule," not the archive. All statuses / Completed
-                are one click away. */}
-            <SelectItem value="RECENT">Recent (default)</SelectItem>
+            {/* Ongoing (default): everything except COMPLETED — i.e.
+                End Date >= today, since the auto-complete pass stamps
+                past-end bookings COMPLETED. Matches how most users
+                read the Events list — "what's still on the schedule,"
+                not the archive. All statuses / Completed are one
+                click away for the past-events view. */}
+            <SelectItem value="ONGOING">Ongoing (default)</SelectItem>
             <SelectItem value="ALL">All statuses</SelectItem>
             {/* Cancelled bookings are filtered upstream — hiding the
                 filter option too so nobody wonders where their filter
