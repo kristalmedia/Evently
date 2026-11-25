@@ -38,6 +38,14 @@ export interface SheetServiceBooking {
   /** Free-text venue / location, added to the Sheet by the Sales team.
    *  Displayed in the event detail page and the KOTG bookings table. */
   LocationDetails: string;
+  /** Logical event id from the upstream Magnet DB (added to the Sheet
+   *  Nov 2026). Several bookings for the same event share this id, so
+   *  it's the authoritative group key for "same event, multiple
+   *  bookings" — see eventGroupKey in lib/kotg-projection.ts. Not
+   *  populated on every row yet; the group key falls back to the
+   *  display title for legacy bookings without one. Format observed:
+   *  "KM-EVT-<UUID>". */
+  EventID: string;
 }
 
 export interface SheetClient {

@@ -330,16 +330,19 @@ export function fullCalendarEnd(
   return addOneDayISO(end);
 }
 
-/** Group key for merging bookings into a single dashboard event — the
- *  display title, lowercased and whitespace-collapsed. A single
- *  "EventID" column doesn't exist on the Sheet yet, so until Sales
- *  adds one upstream this is the stable proxy: bookings that Sales has
- *  given the same customer-facing name belong to the same event. When
- *  that column lands, swap this to read `booking.EventID` (with a
- *  fallback to the title for legacy rows) and the merge pipeline below
- *  keeps working unchanged. */
+/** Group key for merging bookings into a single dashboard event.
+ *  Primary: the upstream Magnet DB EventID (added to the Sheet Nov
+ *  2026). Several Sheet bookings for the same logical event share one
+ *  EventID, so matching on it is the authoritative "same event, many
+ *  bookings" signal. Fallback: the display title, lowercased and
+ *  whitespace-collapsed — covers legacy bookings created before
+ *  EventID was populated. The fallback key is prefixed with "title:"
+ *  so an EventID that happens to equal a title string can never
+ *  collide with the fallback key for the same string. */
 export function eventGroupKey(booking: KotgBookingWithClient): string {
-  return kotgDisplayTitle(booking).trim().toLowerCase().replace(/\s+/g, " ");
+  const eventId = booking.booking.EventID?.trim();
+  if (eventId) return `evt:${eventId}`;
+  return `title:${kotgDisplayTitle(booking).trim().toLowerCase().replace(/\s+/g, " ")}`;
 }
 
 /** Group a list of bookings into clusters that represent the same event.

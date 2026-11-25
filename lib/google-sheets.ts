@@ -23,10 +23,14 @@ const SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"];
 
 // Generous range caps — well beyond any realistic row count for a manually
 // maintained sales sheet, cheap to over-request on a values.get call.
-// Range extended to W to include LocationDetails (added 2026-09).
-const RANGE_SERVICE_BOOKINGS = "ServiceBookings!A1:W10000";
-const RANGE_CLIENTS = "Clients!A1:M10000";
-const RANGE_CUSTOM_PACKAGES = "CustomPackages!A1:K10000";
+// Column range extends beyond the current known header count so Sales can
+// add a column at the right edge without us silently truncating it (the
+// previous W cap did exactly that: EventID landed in column X and was
+// invisible to Evently until we noticed the missing data). parseSheetRows
+// below is header-name-driven, so over-fetching empty columns is harmless.
+const RANGE_SERVICE_BOOKINGS = "ServiceBookings!A1:AF10000";
+const RANGE_CLIENTS = "Clients!A1:T10000";
+const RANGE_CUSTOM_PACKAGES = "CustomPackages!A1:R10000";
 
 /**
  * JWT client anchored to globalThis — same HMR-survival pattern as
