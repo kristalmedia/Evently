@@ -29,22 +29,19 @@ import type { EventListRow, EventStatus } from "@/lib/types";
 
 type SortKey = "title" | "startDate" | "status" | "priority";
 
-/** Status filter value. "ONGOING" is the default — hides COMPLETED
- *  events so the list reads as "what's still on the schedule" (any
- *  booking whose end date hasn't passed yet, since the auto-complete
- *  pass stamps past-end bookings COMPLETED). "ALL" shows everything
- *  including completed; selecting "COMPLETED" explicitly surfaces
- *  the archive. Formerly called "RECENT" — renamed Nov 2026 so the
- *  label matches what it does (End Date >= today). */
-type StatusFilter = EventStatus | "ALL" | "ONGOING";
+/** Status filter value. COMPLETED is intentionally not an option here —
+ *  the /events server page strips end-date-in-past rows BEFORE handing
+ *  them to this component, so the dropdown only lets you narrow to
+ *  specific ongoing/upcoming sub-statuses. The archive lives on the
+ *  Dashboard's Recent-events panel and on /reports. */
+type StatusFilter = EventStatus | "ALL";
 
 export function EventsTable({ rows }: { rows: EventListRow[] }) {
   const [q, setQ] = useState("");
-  // Default: hide past/completed events. End-date-in-past bookings
-  // have already been stamped COMPLETED by mapKotgBookingToEventStatus,
-  // so filtering !COMPLETED here is equivalent to "End Date >= today".
-  // Switching to ALL or to COMPLETED explicitly surfaces the archive.
-  const [status, setStatus] = useState<StatusFilter>("ONGOING");
+  // Default: show every (non-past) row. Users typically want to see
+  // the whole ongoing+upcoming pipeline at once; the narrower status
+  // filters are opt-in.
+  const [status, setStatus] = useState<StatusFilter>("ALL");
   /** Month filter: "ALL" or "YYYY-MM". */
   const [month, setMonth] = useState<string>("ALL");
   const [sortKey, setSortKey] = useState<SortKey>("startDate");
@@ -65,8 +62,7 @@ export function EventsTable({ rows }: { rows: EventListRow[] }) {
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
     let list = rows;
-    if (status === "ONGOING") list = list.filter((r) => r.status !== "COMPLETED");
-    else if (status !== "ALL") list = list.filter((r) => r.status === status);
+    if (status !== "ALL") list = list.filter((r) => r.status === status);
     if (month !== "ALL") {
       list = list.filter((r) => {
         if (!r.startDate) return false;
@@ -123,19 +119,18 @@ export function EventsTable({ rows }: { rows: EventListRow[] }) {
             <SelectValue placeholder="Filter status" />
           </SelectTrigger>
           <SelectContent>
-            {/* Ongoing (default): everything except COMPLETED — i.e.
-                End Date >= today, since the auto-complete pass stamps
-                past-end bookings COMPLETED. Matches how most users
-                read the Events list — "what's still on the schedule,"
-                not the archive. All statuses / Completed are one
-                click away for the past-events view. */}
-            <SelectItem value="ONGOING">Ongoing (default)</SelectItem>
-            <SelectItem value="ALL">All statuses</SelectItem>
-            {/* Cancelled bookings are filtered upstream — hiding the
-                filter option too so nobody wonders where their filter
-                choice went. Legacy statuses left in the taxonomy (see
-                lib/constants.ts) still render for other consumers. */}
-            {EVENT_STATUSES.filter((s) => s.value !== "CANCELLED").map((s) => (
+            {/* Rows reaching this component are already pre-filtered to
+                ongoing+upcoming (End Date >= today) by the /events page,
+                so the dropdown only narrows WITHIN that pipeline. The
+                CANCELLED and COMPLETED options are both hidden here —
+                CANCELLED is filtered upstream too, and COMPLETED can
+                never match a row that's reached us. Legacy statuses in
+                the taxonomy (see lib/constants.ts) still render for
+                other consumers. */}
+            <SelectItem value="ALL">All ongoing</SelectItem>
+            {EVENT_STATUSES.filter(
+              (s) => s.value !== "CANCELLED" && s.value !== "COMPLETED",
+            ).map((s) => (
               <SelectItem key={s.value} value={s.value}>
                 {s.label}
               </SelectItem>

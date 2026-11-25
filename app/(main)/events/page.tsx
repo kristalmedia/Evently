@@ -30,14 +30,22 @@ export default async function EventsPage() {
   // multi-day run). Collapse them into one list row keyed on the
   // display title so the Events list reads as "one event per card,"
   // not "one Sheet row per card." See projectGroupedBookingRows.
-  const rows = projectGroupedBookingRows(bookings);
+  //
+  // Then hard-drop COMPLETED (end date in the past, per the
+  // auto-complete pass in mapKotgBookingToEventStatus). The Events
+  // page is now strictly for ongoing and upcoming events; the
+  // archive lives on the Dashboard's Recent-events panel and on
+  // the Reports page.
+  const rows = projectGroupedBookingRows(bookings).filter(
+    (r) => r.status !== "COMPLETED",
+  );
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Event Management"
         title="Events"
-        description="Every booking from ServiceBookings. Default view shows ongoing events (End Date >= today); switch to All statuses or Completed to see past events."
+        description="Ongoing and upcoming bookings from ServiceBookings (End Date >= today). Past events are archived on the Dashboard's Recent panel and in Reports."
       />
 
       {rows.length === 0 ? (
