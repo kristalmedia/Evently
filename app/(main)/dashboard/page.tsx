@@ -77,13 +77,20 @@ export default async function DashboardPage() {
 
   const live = ongoing;
 
-  // Recent events panel — the 5 most recently completed events, newest
-  // first, so the dashboard shows what just finished without having to
-  // jump to the Events list and flip the status filter off "Recent".
-  // Sorted by endDate (then startDate as a tiebreaker) so two events
-  // that ended the same day order by the one that started later first,
-  // which tracks what "most recent" feels like to Sales.
-  const recent = [...completed]
+  // Recent events panel — the 5 most recently completed GUARDIAN events,
+  // newest first. "Guardian" is matched on the organiser label as a
+  // whole word (case-insensitive), which picks up the real client
+  // "GUARDIAN HEALTH & BEAUTY (B) SDN BHD" and any future Guardian-
+  // named client, without false-positives on tokens like "guardianship".
+  // If Sales later adds an explicit "EventID" column to ServiceBookings
+  // that carries a Magnet tag, swap this predicate for the tag check
+  // and the panel keeps working. Sort on endDate desc (startDate as
+  // tiebreaker) so two events that ended the same day order by the
+  // one that started later first — matches what "most recent" feels
+  // like to Sales.
+  const GUARDIAN_WORD = /\bguardian\b/i;
+  const recent = completed
+    .filter((r) => GUARDIAN_WORD.test(r.organizer))
     .sort((a, b) => {
       const endCmp = +new Date(b.endDate) - +new Date(a.endDate);
       if (endCmp !== 0) return endCmp;
